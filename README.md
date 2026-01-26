@@ -224,6 +224,66 @@ curl https://YOUR-CONTAINER-APP.azurecontainerapps.io/health
 
 All connection details are saved in `deployment-info.json` for reference.
 
+## Using Existing Service Principal and Roles
+
+If you have an **existing Entra App registration** with Service Principal and roles already configured, the deployment script will automatically detect and reuse them. This is a supported scenario.
+
+### Workaround Steps:
+
+**1. Run deployment with the existing app name:**
+
+```powershell
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 `
+  -ResourceGroup "YOUR-RESOURCE-GROUP" `
+  -EntraAppName "Azure Cosmos DB MCP Toolkit API"  # Use your existing app name
+```
+
+**What happens:**
+- ✅ Script detects existing Entra App by name
+- ✅ Reuses existing app registration, Service Principal, and roles
+- ✅ Skips app creation (no modifications to existing app)
+- ✅ Continues with Container App deployment
+- ✅ Assigns roles to your user if not already assigned
+
+**2. If roles need to be reassigned to users:**
+
+```powershell
+# Assign to yourself
+.\scripts\Assign-Role-To-Current-User.ps1
+
+# Assign to multiple users
+.\scripts\Assign-Role-To-Users.ps1 -UserEmails "user1@company.com,user2@company.com"
+
+# Verify assignments
+.\scripts\Verify-Role-Assignments.ps1
+```
+
+**3. If the app name is different or you want isolation:**
+
+Create a new app with a unique name:
+
+```powershell
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 `
+  -ResourceGroup "YOUR-RESOURCE-GROUP" `
+  -EntraAppName "MCP Toolkit Test Environment"  # New unique name
+```
+
+### When This Applies:
+
+- **Previous deployment**: You ran the deployment before and want to update
+- **Shared environment**: Multiple developers using the same Entra App
+- **Testing**: Redeploying after infrastructure changes
+- **CI/CD**: Automated deployments that reuse the same app registration
+
+### Key Points:
+
+✅ **Reusing existing apps is fully supported** - The script handles it gracefully  
+✅ **No manual cleanup required** - Script detects and adapts automatically  
+✅ **Roles persist** - Existing role assignments are preserved  
+✅ **Safe to rerun** - Deployment is idempotent (can run multiple times safely)
+
+---
+
 ## Troubleshooting
 
 If you encounter issues during deployment or testing, see the comprehensive [Troubleshooting Guide](docs/TROUBLESHOOTING-DEPLOYMENT.md).
