@@ -74,10 +74,15 @@ Write-Host ""
 Write-Info "Reading deployment configuration..."
 try {
     $deploymentInfo = Get-Content $DeploymentInfoPath | ConvertFrom-Json
-    $spObjectId = $deploymentInfo.entraAppSpObjectId
-    $clientId = $deploymentInfo.entraAppClientId
+    $spObjectId = $deploymentInfo.ENTRA_APP_SP_OBJECT_ID
+    $clientId = $deploymentInfo.ENTRA_APP_CLIENT_ID
+    $appDisplayName = $deploymentInfo.ENTRA_APP_DISPLAY_NAME
+    if (-not $appDisplayName) {
+        $appDisplayName = "Azure Cosmos DB MCP Toolkit API"
+    }
     Write-Success "✓ Service Principal Object ID: $spObjectId"
     Write-Success "✓ App Client ID: $clientId"
+    Write-Success "✓ App Display Name: $appDisplayName"
 } catch {
     Write-Error "❌ ERROR: Failed to read deployment-info.json"
     Write-Host ""
@@ -87,9 +92,20 @@ try {
 
 Write-Host ""
 
+# Retrieve the app role ID dynamically from the Enterprise Application
+Write-Info "Retrieving app role ID from Enterprise Application..."
+$appRoleId = az ad sp list --display-name $appDisplayName --query "[].appRoles[].id" --output tsv 2>$null
+
+if (-not $appRoleId -or $appRoleId -eq "null" -or $appRoleId -eq "") {
+    Write-Error "❌ ERROR: Failed to retrieve app role ID from Enterprise Application"
+    Write-Host "  Ensure the Enterprise Application '$appDisplayName' has an app role defined."
+    exit 1
+}
+Write-Success "✓ App Role ID: $appRoleId"
+Write-Host ""
+
 # Assign role
 Write-Info "Assigning 'Mcp.Tool.Executor' role..."
-$appRoleId = "c6ae5dd5-ae87-48d8-8134-e07d93fdb962"
 
 $body = @{
     principalId = $me.id
@@ -135,5 +151,5 @@ Write-Host "  1. Sign out from the web UI"
 Write-Host "  2. Use Incognito/Private browser window"
 Write-Host "  3. Sign in again to get a fresh token with the role"
 Write-Host ""
-Write-Info "Container App URL: $($deploymentInfo.containerAppUrl)"
+Write-Info "MCP Server URL: $($deploymentInfo.MCP_SERVER_URI)"
 Write-Host ""
