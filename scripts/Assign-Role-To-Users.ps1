@@ -59,9 +59,12 @@ if (-not (Test-Path $DeploymentInfoPath)) {
 Write-Info "Reading deployment configuration..."
 try {
     $deploymentInfo = Get-Content $DeploymentInfoPath | ConvertFrom-Json
-    $spObjectId = $deploymentInfo.entraAppSpObjectId
-    $clientId = $deploymentInfo.entraAppClientId
-    $appDisplayName = $deploymentInfo.entraAppDisplayName
+    $spObjectId = $deploymentInfo.ENTRA_APP_SP_OBJECT_ID
+    $clientId = $deploymentInfo.ENTRA_APP_CLIENT_ID
+    $appDisplayName = $deploymentInfo.ENTRA_APP_DISPLAY_NAME
+    if (-not $appDisplayName) {
+        $appDisplayName = "Azure Cosmos DB MCP Toolkit API"
+    }
     Write-Success "✓ Service Principal Object ID: $spObjectId"
     Write-Success "✓ App Client ID: $clientId"
     Write-Success "✓ App Display Name: $appDisplayName"

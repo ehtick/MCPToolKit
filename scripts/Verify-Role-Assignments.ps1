@@ -50,11 +50,15 @@ if (-not (Test-Path $DeploymentInfoPath)) {
 Write-Info "Reading deployment configuration..."
 try {
     $deploymentInfo = Get-Content $DeploymentInfoPath | ConvertFrom-Json
-    $spObjectId = $deploymentInfo.entraAppSpObjectId
-    $clientId = $deploymentInfo.entraAppClientId
-    $appName = "Azure Cosmos DB MCP Toolkit API"
+    $spObjectId = $deploymentInfo.ENTRA_APP_SP_OBJECT_ID
+    $clientId = $deploymentInfo.ENTRA_APP_CLIENT_ID
+    $appDisplayName = $deploymentInfo.ENTRA_APP_DISPLAY_NAME
+    if (-not $appDisplayName) {
+        $appDisplayName = "Azure Cosmos DB MCP Toolkit API"
+    }
     Write-Success "✓ Service Principal Object ID: $spObjectId"
     Write-Success "✓ App Client ID: $clientId"
+    Write-Success "✓ App Display Name: $appDisplayName"
 } catch {
     Write-Error "❌ ERROR: Failed to read deployment-info.json"
     Write-Host ""
@@ -64,9 +68,20 @@ try {
 
 Write-Host ""
 
+# Retrieve the app role ID dynamically from the Enterprise Application
+Write-Info "Retrieving app role ID from Enterprise Application..."
+$appRoleId = az ad sp list --display-name $appDisplayName --query "[].appRoles[].id" --output tsv 2>$null
+
+if (-not $appRoleId -or $appRoleId -eq "null" -or $appRoleId -eq "") {
+    Write-Error "❌ ERROR: Failed to retrieve app role ID from Enterprise Application"
+    Write-Host "  Ensure the Enterprise Application '$appDisplayName' has an app role defined."
+    exit 1
+}
+Write-Success "✓ App Role ID: $appRoleId"
+Write-Host ""
+
 # Get role assignments
 Write-Info "Fetching role assignments..."
-$appRoleId = "c6ae5dd5-ae87-48d8-8134-e07d93fdb962"
 
 try {
     $result = az rest --method GET `
@@ -124,7 +139,7 @@ Write-Info "=========================================="
 Write-Info "Application Information"
 Write-Info "=========================================="
 Write-Host ""
-Write-Host "App Name: $appName" -ForegroundColor Cyan
+Write-Host "App Name: $appDisplayName" -ForegroundColor Cyan
 Write-Host "Client ID: $clientId" -ForegroundColor Cyan
-Write-Host "Container App URL: $($deploymentInfo.containerAppUrl)" -ForegroundColor Cyan
+Write-Host "MCP Server URL: $($deploymentInfo.MCP_SERVER_URI)" -ForegroundColor Cyan
 Write-Host ""

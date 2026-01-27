@@ -295,7 +295,7 @@ For more information: https://aka.ms/service-management-reference-error
         # Prepare the app-roles payload by fetching existing roles, appending a new one
         $existingRoles = $appDetails.appRoles
         $newRole = @{
-            allowedMemberTypes = @("Application")
+            allowedMemberTypes = @("User", "Application")
             description = $ENTRA_APP_ROLE_DESC
             displayName = $ENTRA_APP_ROLE_DISPLAY
             id = $ENTRA_APP_ROLE_ID
