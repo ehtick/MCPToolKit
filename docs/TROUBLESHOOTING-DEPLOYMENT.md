@@ -347,7 +347,7 @@ The role assignment takes effect **immediately**, but you need a fresh token:
 
 ```powershell
 # Check if role is assigned to your user
-$appId = (Get-Content deployment-info.json | ConvertFrom-Json).entraAppClientId
+$appId = (Get-Content deployment-info.json | ConvertFrom-Json).ENTRA_APP_CLIENT_ID
 $userEmail = az account show --query "user.name" -o tsv
 az ad app show --id $appId --query "appRoles[?value=='Mcp.Tool.Executor'].{id:id}" -o tsv
 

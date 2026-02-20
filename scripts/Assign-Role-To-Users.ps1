@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Assigns the Mcp.Tool.Executor role to one or more users.
 
@@ -117,20 +117,60 @@ $failedUsers = @()
 foreach ($userEmail in $users) {
     Write-Info "Processing: $userEmail"
     
-    # Try standard lookup first
-    $userObjectId = az ad user show --id $userEmail --query "id" -o tsv 2>$null
+    $userObjectId = $null
     
-    # If standard lookup fails, try searching by display name
+    # Method 1: Standard az ad user show
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
+    $userObjectId = az ad user show --id $userEmail --query "id" -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0) { $userObjectId = $null }
+    $ErrorActionPreference = $oldEAP
+    
+    # Method 2: az ad user list with server-side OData filter (avoids JMESPath null issues)
     if (-not $userObjectId -or $userObjectId -eq "null" -or $userObjectId -eq "") {
-        Write-Warning "  ⚠ Standard lookup failed, trying alternative methods..."
+        Write-Warning "  Standard lookup failed, trying alternative methods..."
         
-        # Try searching by display name (extract name from email)
-        $displayName = $userEmail.Split('@')[0]
-        $searchResult = az ad user list --query "[?contains(mail, '$userEmail') || contains(userPrincipalName, '$userEmail')].id" -o tsv 2>$null
-        
-        if ($searchResult -and $searchResult -ne "" -and $searchResult -ne "null") {
-            $userObjectId = $searchResult
+        $oldEAP2 = $ErrorActionPreference
+        $ErrorActionPreference = 'SilentlyContinue'
+        $searchResult = az ad user list --filter "mail eq '$userEmail' or userPrincipalName eq '$userEmail'" --query "[0].id" -o tsv 2>$null
+        if ($LASTEXITCODE -eq 0 -and $searchResult -and $searchResult -ne "" -and $searchResult -ne "null") {
+            $userObjectId = $searchResult.Trim()
         }
+        $ErrorActionPreference = $oldEAP2
+    }
+    
+    # Method 3: Graph API with $filter on mail or userPrincipalName
+    if (-not $userObjectId -or $userObjectId -eq "null" -or $userObjectId -eq "") {
+        Write-Warning "  Trying Graph API search..."
+        try {
+            $graphUrl = "https://graph.microsoft.com/v1.0/users?`$filter=mail eq '$userEmail' or userPrincipalName eq '$userEmail'&`$select=id,displayName,userPrincipalName"
+            $graphResult = az rest --method GET --url $graphUrl 2>$null
+            if ($LASTEXITCODE -eq 0 -and $graphResult) {
+                $graphObj = $graphResult | ConvertFrom-Json
+                if ($graphObj.value -and $graphObj.value.Count -gt 0) {
+                    $userObjectId = $graphObj.value[0].id
+                    $foundName = $graphObj.value[0].displayName
+                    Write-Success "  Found via Graph API: $foundName ($userObjectId)"
+                }
+            }
+        } catch { }
+    }
+    
+    # Method 4: Graph API with startsWith on userPrincipalName (handles #EXT# guest accounts)
+    if (-not $userObjectId -or $userObjectId -eq "null" -or $userObjectId -eq "") {
+        try {
+            $emailPrefix = $userEmail.Replace('@', '_').Replace('.', '_')
+            $graphUrl = "https://graph.microsoft.com/v1.0/users?`$filter=startsWith(userPrincipalName,'$emailPrefix')&`$select=id,displayName,userPrincipalName"
+            $graphResult = az rest --method GET --url $graphUrl 2>$null
+            if ($LASTEXITCODE -eq 0 -and $graphResult) {
+                $graphObj = $graphResult | ConvertFrom-Json
+                if ($graphObj.value -and $graphObj.value.Count -gt 0) {
+                    $userObjectId = $graphObj.value[0].id
+                    $foundName = $graphObj.value[0].displayName
+                    Write-Success "  Found via Graph API (guest lookup): $foundName ($userObjectId)"
+                }
+            }
+        } catch { }
     }
     
     if ($userObjectId -and $userObjectId -ne "null" -and $userObjectId -ne "") {
@@ -147,12 +187,16 @@ foreach ($userEmail in $users) {
         try {
             $body | Out-File -FilePath $tempFile -Encoding utf8 -NoNewline
             
-            $result = az rest --method POST `
-                --url "https://graph.microsoft.com/v1.0/servicePrincipals/$spObjectId/appRoleAssignedTo" `
-                --headers "Content-Type=application/json" `
-                --body "@$tempFile" 2>&1
+            try {
+                $result = az rest --method POST `
+                    --url "https://graph.microsoft.com/v1.0/servicePrincipals/$spObjectId/appRoleAssignedTo" `
+                    --headers "Content-Type=application/json" `
+                    --body "@$tempFile" 2>&1
+            } catch {
+                $result = $_.Exception.Message
+            }
             
-            if ($LASTEXITCODE -eq 0) {
+            if ($LASTEXITCODE -eq 0 -and -not ($result -match "already exists")) {
                 Write-Success "  ✅ Role assigned to $userEmail"
                 $successCount++
             } elseif ($result -match "already exists") {
@@ -201,5 +245,5 @@ if ($failedUsers.Count -gt 0) {
 
 Write-Host ""
 Write-Info "Verify assignments:"
-Write-Host "  az rest --method GET --url 'https://graph.microsoft.com/v1.0/servicePrincipals/$spObjectId/appRoleAssignedTo' --query \"value[?appRoleId=='$appRoleId'].{user:principalDisplayName, assigned:createdDateTime}\" -o table"
+Write-Host ('  az rest --method GET --url "https://graph.microsoft.com/v1.0/servicePrincipals/{0}/appRoleAssignedTo" --query "value[?appRoleId==''{1}''].{{user:principalDisplayName, assigned:createdDateTime}}" -o table' -f $spObjectId, $appRoleId)
 Write-Host ""

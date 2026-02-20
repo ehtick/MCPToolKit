@@ -248,7 +248,7 @@
                     <label for="clientId">Entra App Client ID:</label>
                     <input type="text" id="clientId" placeholder="Enter your Entra App Client ID" value="">
                     <small style="color: #666;">
-                        Get from deployment-info.json (entraAppClientId) or run:<br>
+                        Get from deployment-info.json (ENTRA_APP_CLIENT_ID) or run:<br>
                         <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">az ad app list --display-name "Azure Cosmos DB MCP Toolkit API" --query "[0].appId" -o tsv</code>
                     </small>
                 </div>
@@ -285,7 +285,7 @@
             <h3>Configuration</h3>
             <div class="form-group">
                 <label for="serverUrl">Azure Cosmos DB MCP Server URL:</label>
-                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-toolkit-app.icywave-532ba7dd.westus2.azurecontainerapps.io" oninput="updateCurlExamples()">
+                <input type="url" id="serverUrl" placeholder="https://your-app.azurecontainerapps.io" value="https://mcp-toolkit-app.yellowsmoke-f27922f2.eastus.azurecontainerapps.io" oninput="updateCurlExamples()">
             </div>
         </div>
 
@@ -424,7 +424,7 @@
             const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             
             if (!guidPattern.test(clientId)) {
-                showError('Client ID must be a valid GUID (e.g., 12345678-1234-1234-1234-123456789abc). Please check your deployment-info.json for the correct entraAppClientId value.');
+                showError('Client ID must be a valid GUID (e.g., 12345678-1234-1234-1234-123456789abc). Please check your deployment-info.json for the correct ENTRA_APP_CLIENT_ID value.');
                 return false;
             }
             
@@ -493,7 +493,7 @@
                 
                 // Check for specific error about application not found
                 if (error.message && error.message.includes('was not found in the directory')) {
-                    showError(`Application not found in directory.\n\n❌ This usually means:\n1. The Client ID is incorrect - verify it matches your deployment-info.json\n2. You may have entered the Tenant ID in the Client ID field\n3. The Entra App hasn't been created yet - run the deployment script\n\n🔧 To fix:\n- Get the correct Client ID: az ad app list --display-name "Azure Cosmos DB MCP Toolkit API" --query "[0].appId" -o tsv\n- Or check your deployment-info.json file for "entraAppClientId"\n\nOriginal error: ${error.message}`);
+                    showError(`Application not found in directory.\n\n❌ This usually means:\n1. The Client ID is incorrect - verify it matches your deployment-info.json\n2. You may have entered the Tenant ID in the Client ID field\n3. The Entra App hasn't been created yet - run the deployment script\n\n🔧 To fix:\n- Get the correct Client ID: az ad app list --display-name "Azure Cosmos DB MCP Toolkit API" --query "[0].appId" -o tsv\n- Or check your deployment-info.json file for "ENTRA_APP_CLIENT_ID"\n\nOriginal error: ${error.message}`);
                 } else if (error.message && error.message.includes('wrong tenant')) {
                     showError(`Wrong tenant error.\n\n❌ You may have:\n1. Entered the wrong Tenant ID\n2. Swapped the Client ID and Tenant ID\n\n🔧 To fix:\n- Get your Tenant ID: az account show --query "tenantId" -o tsv\n- Verify Client ID and Tenant ID are different values\n\nOriginal error: ${error.message}`);
                 } else {
