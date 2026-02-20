@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Verifies role assignments for the Azure Cosmos DB MCP Toolkit.
 

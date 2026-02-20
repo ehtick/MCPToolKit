@@ -339,7 +339,7 @@ This assigns the necessary roles for Microsoft Foundry to call your MCP server.
    > [!TIP]
    > Find the `ENTRA_APP_CLIENT_ID` value in your `deployment-info.json` file or run:
    > ```powershell
-   > Get-Content deployment-info.json | ConvertFrom-Json | Select-Object -ExpandProperty entraAppClientId
+   > Get-Content deployment-info.json | ConvertFrom-Json | Select-Object -ExpandProperty ENTRA_APP_CLIENT_ID
    > ```
 
 8. Add instructions to your agent:
@@ -412,7 +412,7 @@ az account get-access-token --resource YOUR-ENTRA-APP-CLIENT-ID --query accessTo
 
 ```powershell
 # Get the Client ID
-$clientId = (Get-Content deployment-info.json | ConvertFrom-Json).entraAppClientId
+$clientId = (Get-Content deployment-info.json | ConvertFrom-Json).ENTRA_APP_CLIENT_ID
 Write-Host "Your Entra App Client ID: $clientId"
 
 # Get the token (copy the output)

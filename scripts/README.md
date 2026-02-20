@@ -280,12 +280,12 @@ Created by `Deploy-Cosmos-MCP-Toolkit.ps1` and used by role assignment scripts.
 **Contents:**
 ```json
 {
-    "entraAppClientId": "your-app-client-id",
-    "entraAppSpObjectId": "your-service-principal-object-id",
-    "tenantId": "your-tenant-id",
-    "containerAppUrl": "https://your-app.azurecontainerapps.io",
-    "cosmosAccountName": "your-cosmos-account",
-    "resourceGroup": "your-resource-group"
+    "ENTRA_APP_CLIENT_ID": "your-app-client-id",
+    "ENTRA_APP_SP_OBJECT_ID": "your-service-principal-object-id",
+    "TENANT_ID": "your-tenant-id",
+    "MCP_SERVER_URI": "https://your-app.azurecontainerapps.io",
+    "COSMOS_ACCOUNT_NAME": "your-cosmos-account",
+    "RESOURCE_GROUP": "your-resource-group"
 }
 ```
 

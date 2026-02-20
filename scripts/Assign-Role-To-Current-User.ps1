@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Assigns the Mcp.Tool.Executor role to the current user.
 
@@ -117,12 +117,16 @@ $tempFile = "$env:TEMP\role-assignment-$([guid]::NewGuid()).json"
 try {
     $body | Out-File -FilePath $tempFile -Encoding utf8 -NoNewline
     
-    $result = az rest --method POST `
-        --url "https://graph.microsoft.com/v1.0/servicePrincipals/$spObjectId/appRoleAssignedTo" `
-        --headers "Content-Type=application/json" `
-        --body "@$tempFile" 2>&1
+    try {
+        $result = az rest --method POST `
+            --url "https://graph.microsoft.com/v1.0/servicePrincipals/$spObjectId/appRoleAssignedTo" `
+            --headers "Content-Type=application/json" `
+            --body "@$tempFile" 2>&1
+    } catch {
+        $result = $_.Exception.Message
+    }
     
-    if ($LASTEXITCODE -eq 0) {
+    if ($LASTEXITCODE -eq 0 -and -not ($result -match "already exists")) {
         Write-Host ""
         Write-Success "=========================================="
         Write-Success "✅ SUCCESS! Role assigned."

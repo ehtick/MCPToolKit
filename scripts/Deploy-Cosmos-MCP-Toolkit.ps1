@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     Deploy Azure Cosmos DB MCP Toolkit to Azure Container App
@@ -282,6 +282,78 @@ For more information: https://aka.ms/service-management-reference-error
         Write-Warn "Failed to set Application ID URI, but continuing deployment..."
     }
 
+    # Add OAuth2 permission scope and pre-authorize Azure CLI
+    # This is required for `az account get-access-token --resource <clientId>` to work
+    Write-Info "Configuring OAuth2 permission scope for token acquisition..."
+    try {
+        $appDetails = az rest --method GET --url $ENTRA_APP_URL | ConvertFrom-Json
+        $existingScopes = $appDetails.api.oauth2PermissionScopes
+        $hasAccessScope = $existingScopes | Where-Object { $_.value -eq "access_as_user" }
+
+        if (-not $hasAccessScope) {
+            Write-Info "Adding 'access_as_user' OAuth2 permission scope..."
+            $scopeId = [guid]::NewGuid().ToString()
+            $scopePayload = @{
+                api = @{
+                    oauth2PermissionScopes = @(
+                        @{
+                            adminConsentDescription = "Allow the application to access the Cosmos DB MCP Toolkit API on behalf of the signed-in user."
+                            adminConsentDisplayName = "Access Cosmos DB MCP Toolkit API"
+                            id = $scopeId
+                            isEnabled = $true
+                            type = "User"
+                            userConsentDescription = "Allow the application to access the Cosmos DB MCP Toolkit API on your behalf."
+                            userConsentDisplayName = "Access Cosmos DB MCP Toolkit API"
+                            value = "access_as_user"
+                        }
+                    )
+                }
+            } | ConvertTo-Json -Depth 10
+
+            $tempScopeFile = [System.IO.Path]::GetTempFileName()
+            $scopePayload | Out-File -FilePath $tempScopeFile -Encoding utf8 -NoNewline
+            az rest --method PATCH --url $ENTRA_APP_URL --headers "Content-Type=application/json" --body "@$tempScopeFile" | Out-Null
+            Remove-Item $tempScopeFile -Force
+            Write-Info "OAuth2 permission scope 'access_as_user' added successfully"
+        } else {
+            $scopeId = $hasAccessScope.id
+            Write-Info "OAuth2 permission scope 'access_as_user' already exists"
+        }
+
+        # Pre-authorize Azure CLI (04b07795-8ddb-461a-bbee-02f9e1bf7b46) for the scope
+        Write-Info "Pre-authorizing Azure CLI for token acquisition..."
+        $azureCliAppId = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+
+        $refreshedApp = az rest --method GET --url $ENTRA_APP_URL | ConvertFrom-Json
+        $existingPreAuth = $refreshedApp.api.preAuthorizedApplications | Where-Object { $_.appId -eq $azureCliAppId }
+
+        if (-not $existingPreAuth) {
+            $preAuthPayload = @{
+                api = @{
+                    preAuthorizedApplications = @(
+                        @{
+                            appId = $azureCliAppId
+                            delegatedPermissionIds = @($scopeId)
+                        }
+                    )
+                }
+            } | ConvertTo-Json -Depth 10
+
+            $tempPreAuthFile = [System.IO.Path]::GetTempFileName()
+            $preAuthPayload | Out-File -FilePath $tempPreAuthFile -Encoding utf8 -NoNewline
+            az rest --method PATCH --url $ENTRA_APP_URL --headers "Content-Type=application/json" --body "@$tempPreAuthFile" | Out-Null
+            Remove-Item $tempPreAuthFile -Force
+            Write-Info "Azure CLI pre-authorized successfully"
+        } else {
+            Write-Info "Azure CLI already pre-authorized"
+        }
+    }
+    catch {
+        Write-Warn "Failed to configure OAuth2 scope/pre-authorization: $_"
+        Write-Warn "You may need to manually add a scope and authorize Azure CLI in the Azure Portal."
+        Write-Warn "See: Entra App > Expose an API > Add a scope, then Add a client application"
+    }
+
     # Define the app-role in the Entra App
     Write-Info "Checking for existing app role: $ENTRA_APP_ROLE_VALUE"
 
@@ -333,26 +405,114 @@ For more information: https://aka.ms/service-management-reference-error
     # Get the service principal object ID for the Entra App
     Write-Info "Getting Entra App Service Principal Object ID..."
     
-    # Try to show the SP directly by appId (fastest method)
-    # Suppress error output properly
-    $ErrorActionPreference = 'SilentlyContinue'
-    $ENTRA_APP_SP_OBJECT_ID = az ad sp show --id $ENTRA_APP_CLIENT_ID --query "id" -o tsv 2>&1 | Where-Object { $_ -notmatch "ERROR" }
-    $ErrorActionPreference = 'Continue'
-    
-    if (-not $ENTRA_APP_SP_OBJECT_ID -or $ENTRA_APP_SP_OBJECT_ID -eq "null" -or $ENTRA_APP_SP_OBJECT_ID -eq "") {
-        Write-Info "Service Principal not found, creating one..."
+    # Helper function to look up SP object ID using multiple methods
+    function Get-SpObjectId {
+        param([string]$AppId)
         
-        $createResult = az ad sp create --id $ENTRA_APP_CLIENT_ID 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "Failed to create Service Principal, it may already exist"
-        }
+        $oldEAP = $ErrorActionPreference
+        $spId = $null
         
-        Start-Sleep -Seconds 5  # Wait for SP to propagate
-        $ENTRA_APP_SP_OBJECT_ID = az ad sp show --id $ENTRA_APP_CLIENT_ID --query "id" -o tsv 2>&1 | Where-Object { $_ -notmatch "ERROR" }
+        # Method 1: az ad sp show --id <appId> (fastest)
+        $ErrorActionPreference = 'SilentlyContinue'
+        try {
+            $spRaw = az ad sp show --id $AppId --output json 2>$null
+            if ($LASTEXITCODE -eq 0 -and $spRaw) {
+                $spObj = $spRaw | ConvertFrom-Json
+                if ($spObj -and $spObj.id) {
+                    $spId = $spObj.id
+                }
+            }
+        } catch { }
+        $ErrorActionPreference = $oldEAP
+        if ($spId) { return $spId }
+        
+        # Method 2: az ad sp list --filter (handles replication delays)
+        $ErrorActionPreference = 'SilentlyContinue'
+        try {
+            $spList = az ad sp list --filter "appId eq '$AppId'" --query "[0].id" -o tsv 2>$null
+            if ($LASTEXITCODE -eq 0 -and $spList -and $spList -ne "null" -and $spList.Trim() -ne "") {
+                $spId = $spList.Trim()
+            }
+        } catch { }
+        $ErrorActionPreference = $oldEAP
+        if ($spId) { return $spId }
+        
+        # Method 3: Graph API direct query (works when az ad sp commands fail)
+        $ErrorActionPreference = 'SilentlyContinue'
+        try {
+            $graphUrl = "https://graph.microsoft.com/v1.0/servicePrincipals?\`$filter=appId eq '$AppId'&\`$select=id"
+            $graphResult = az rest --method GET --url $graphUrl 2>$null
+            if ($LASTEXITCODE -eq 0 -and $graphResult) {
+                $graphObj = $graphResult | ConvertFrom-Json
+                if ($graphObj -and $graphObj.value -and $graphObj.value.Count -gt 0) {
+                    $spId = $graphObj.value[0].id
+                }
+            }
+        } catch { }
+        $ErrorActionPreference = $oldEAP
+        
+        return $spId
     }
     
-    if (-not $ENTRA_APP_SP_OBJECT_ID -or $ENTRA_APP_SP_OBJECT_ID -eq "null" -or $ENTRA_APP_SP_OBJECT_ID -eq "") {
+    # Small delay to allow Entra ID to propagate the app registration
+    Start-Sleep -Seconds 3
+    
+    $ENTRA_APP_SP_OBJECT_ID = Get-SpObjectId -AppId $ENTRA_APP_CLIENT_ID
+    
+    if (-not $ENTRA_APP_SP_OBJECT_ID) {
+        Write-Info "Service Principal not found, creating one..."
+        
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = 'SilentlyContinue'
+        $createResult = az ad sp create --id $ENTRA_APP_CLIENT_ID 2>&1
+        $createExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $oldEAP
+        
+        if ($createExitCode -ne 0) {
+            $createResultStr = $createResult | Out-String
+            if ($createResultStr -match "already exists|conflicting object") {
+                Write-Info "Service Principal already exists (creation returned conflict). Retrying lookup..."
+            } else {
+                Write-Warn "az ad sp create returned non-zero exit code."
+                Write-Warn "Output: $createResultStr"
+                Write-Info "Will retry lookup in case the SP was created despite the error..."
+            }
+        } else {
+            Write-Info "Service Principal created successfully"
+            # If creation returned JSON output, try to extract the SP ID directly
+            if ($createResult) {
+                try {
+                    $createObj = ($createResult | Out-String) | ConvertFrom-Json
+                    if ($createObj -and $createObj.id) {
+                        $ENTRA_APP_SP_OBJECT_ID = $createObj.id
+                        Write-Info "Extracted SP Object ID from creation response: $ENTRA_APP_SP_OBJECT_ID"
+                    }
+                } catch { }
+            }
+        }
+        
+        # If we didn't extract the ID from the create response, retry lookup with increasing delays
+        if (-not $ENTRA_APP_SP_OBJECT_ID) {
+            $retryDelays = @(5, 10, 15)
+            foreach ($delay in $retryDelays) {
+                Write-Info "Waiting $delay seconds for Service Principal to propagate..."
+                Start-Sleep -Seconds $delay
+                $ENTRA_APP_SP_OBJECT_ID = Get-SpObjectId -AppId $ENTRA_APP_CLIENT_ID
+                if ($ENTRA_APP_SP_OBJECT_ID) {
+                    Write-Info "Service Principal found after retry"
+                    break
+                }
+            }
+        }
+    }
+    
+    if (-not $ENTRA_APP_SP_OBJECT_ID) {
         Write-Error "Failed to get or create Service Principal for Entra App"
+        Write-Error ""
+        Write-Error "MANUAL FIX:"
+        Write-Error "1. Create the SP manually:  az ad sp create --id $ENTRA_APP_CLIENT_ID"
+        Write-Error "2. Get the SP Object ID:    az ad sp show --id $ENTRA_APP_CLIENT_ID --query id -o tsv"
+        Write-Error "3. Re-run this script"
         exit 1
     }
     

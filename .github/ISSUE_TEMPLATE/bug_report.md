@@ -67,7 +67,7 @@ If relevant, provide your deployment configuration (remove sensitive information
 // Contents from deployment-info.json (if applicable)
 {
   "containerAppUrl": "...",
-  "entraAppClientId": "...",
+  "ENTRA_APP_CLIENT_ID": "...",
   ...
 }
 ```
