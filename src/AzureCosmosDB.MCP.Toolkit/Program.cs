@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using AzureCosmosDB.MCP.Toolkit.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -212,21 +213,10 @@ builder.Services.AddHealthChecks();
 // Register Cosmos DB Client as a singleton for dependency injection
 builder.Services.AddSingleton(sp =>
 {
-    var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-    if (string.IsNullOrWhiteSpace(endpoint))
-    {
-        throw new InvalidOperationException("COSMOS_ENDPOINT environment variable is required.");
-    }
+    var logger = sp.GetRequiredService<ILogger<Program>>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
     
-    var credential = new DefaultAzureCredential();
-    
-    return new CosmosClient(endpoint, credential, new CosmosClientOptions
-    {
-        ApplicationName = "AzureCosmosDBMCP",
-        // Enable detailed logging for diagnostics
-        EnableContentResponseOnWrite = false,
-        RequestTimeout = TimeSpan.FromSeconds(60)
-    });
+    return CosmosClientFactory.CreateCosmosClient(configuration, logger);
 });
 
 // Register services for dependency injection

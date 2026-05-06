@@ -282,28 +282,6 @@ public class CosmosDbToolsService
     {
         try
         {
-            // Get configuration values
-            var openaiEndpoint = _configuration["OPENAI_ENDPOINT"] ?? Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
-            var embeddingDeployment = _configuration["OPENAI_EMBEDDING_DEPLOYMENT"] ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
-            var embeddingDimensionsStr = _configuration["OPENAI_EMBEDDING_DIMENSIONS"] ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DIMENSIONS");
-
-            // Validate environment variables
-            if (string.IsNullOrWhiteSpace(openaiEndpoint))
-            {
-                return new { error = "Missing required environment variable OPENAI_ENDPOINT." };
-            }
-            if (string.IsNullOrWhiteSpace(embeddingDeployment))
-            {
-                return new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." };
-            }
-
-            // Parse embedding dimensions if provided (must be a positive number to be valid)
-            int? embeddingDimensions = null;
-            if (!string.IsNullOrWhiteSpace(embeddingDimensionsStr) && int.TryParse(embeddingDimensionsStr, out int parsedDimensions) && parsedDimensions > 0)
-            {
-                embeddingDimensions = parsedDimensions;
-            }
-
             // Validate parameters
             ValidateRequiredParameter(databaseId, nameof(databaseId));
             ValidateRequiredParameter(containerId, nameof(containerId));
@@ -346,10 +324,26 @@ public class CosmosDbToolsService
             float[] embedding;
             try
             {
-                _logger.LogInformation("OpenAI Endpoint: {Endpoint}, Deployment: {Deployment}", openaiEndpoint, embeddingDeployment);
+                _logger.LogInformation("Creating embedding client for embedding generation");
                 
-                var credential = new DefaultAzureCredential();
-                var openaiClient = new AzureOpenAIClient(new Uri(openaiEndpoint), credential);
+                var openaiClient = EmbeddingClientFactory.CreateEmbeddingClient(_configuration, _logger);
+                
+                var embeddingDeployment = _configuration["OPENAI_EMBEDDING_DEPLOYMENT"] 
+                    ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
+                
+                if (string.IsNullOrWhiteSpace(embeddingDeployment))
+                {
+                    return new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." };
+                }
+                
+                var embeddingDimensionsStr = _configuration["OPENAI_EMBEDDING_DIMENSIONS"] 
+                    ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DIMENSIONS");
+
+                int? embeddingDimensions = null;
+                if (!string.IsNullOrWhiteSpace(embeddingDimensionsStr) && int.TryParse(embeddingDimensionsStr, out int parsedDimensions) && parsedDimensions > 0)
+                {
+                    embeddingDimensions = parsedDimensions;
+                }
                 
                 _logger.LogInformation("Getting embedding client for deployment: {Deployment}", embeddingDeployment);
                 var embeddingClient = openaiClient.GetEmbeddingClient(embeddingDeployment);
@@ -357,7 +351,7 @@ public class CosmosDbToolsService
                 _logger.LogInformation("Generating embedding for text: {Text}{DimensionsInfo}", 
                     searchText, 
                     embeddingDimensions.HasValue ? $" with {embeddingDimensions.Value} dimensions" : "");
-                // Generate embedding with optional dimensions parameter
+                
                 var embeddingResponse = embeddingDimensions.HasValue
                     ? await embeddingClient.GenerateEmbeddingAsync(searchText, new OpenAI.Embeddings.EmbeddingGenerationOptions { Dimensions = embeddingDimensions.Value }, cancellationToken)
                     : await embeddingClient.GenerateEmbeddingAsync(searchText, cancellationToken: cancellationToken);
@@ -367,7 +361,7 @@ public class CosmosDbToolsService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate embedding. Endpoint: {Endpoint}, Deployment: {Deployment}", openaiEndpoint, embeddingDeployment);
+                _logger.LogError(ex, "Failed to generate embedding");
                 return new { error = $"Failed to generate embedding: {ex.Message}" };
             }
 
