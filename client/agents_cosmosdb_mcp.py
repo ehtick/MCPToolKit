@@ -56,6 +56,9 @@ with project_client:
         name="cosmosdb-demo-agent-mcp",
         instructions="""
         You are a helpful agent that can use MCP tools to assist users with Azure Cosmos DB queries.
+        Respect each tool's declared input schema exactly.
+        Do not invent argument names, and keep free-form text inputs concise and relevant.
+        If a tool call fails with an invalid-parameters style error, correct the arguments and retry with a valid payload.
         
         Available tools:
         - list_databases: Lists all databases in the Cosmos DB account
@@ -74,6 +77,7 @@ with project_client:
 
     print(f"Created agent, ID: {agent.id}")
     print(f"MCP Server: {mcp_server_label} at {mcp_server_url}")
+    print("The MCP server enforces strict parameter validation and rejects unknown or malformed tool arguments.")
 
     # Create thread for communication
     thread = agents_client.threads.create()
@@ -138,6 +142,7 @@ with project_client:
     print(f"Run completed with status: {run.status}")
     if run.status == "failed":
         print(f"Run failed: {run.last_error}")
+        print("If the failure mentions invalid params, review the tool arguments against the server-declared schema.")
 
     # Display run steps and tool calls
     run_steps = agents_client.run_steps.list(thread_id=thread.id, run_id=run.id)

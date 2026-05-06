@@ -83,4 +83,104 @@ public class CosmosDbToolsTests
         var errorMessage = JsonSerializer.Serialize(result);
         errorMessage.Should().Contain("required");
     }
+
+        [Fact]
+        public void McpToolRequestValidator_Should_Reject_Unknown_Argument_Properties()
+        {
+                // Arrange
+                var validator = new McpToolRequestValidator();
+                using var document = JsonDocument.Parse(
+                        """
+                        {
+                            "name": "list_collections",
+                            "arguments": {
+                                "databaseId": "db1",
+                                "unexpected": "value"
+                            }
+                        }
+                        """);
+
+                // Act
+                Action act = () => validator.ValidateToolCall(document.RootElement);
+
+                // Assert
+                act.Should().Throw<ToolInputValidationException>()
+                        .WithMessage("*Unknown property 'unexpected' in arguments for 'list_collections'.*");
+        }
+
+        [Fact]
+        public void McpToolRequestValidator_Should_Reject_Wrong_Types()
+        {
+                // Arrange
+                var validator = new McpToolRequestValidator();
+                using var document = JsonDocument.Parse(
+                        """
+                        {
+                            "name": "get_recent_documents",
+                            "arguments": {
+                                "databaseId": "db1",
+                                "containerId": "c1",
+                                "n": "5"
+                            }
+                        }
+                        """);
+
+                // Act
+                Action act = () => validator.ValidateToolCall(document.RootElement);
+
+                // Assert
+                act.Should().Throw<ToolInputValidationException>()
+                        .WithMessage("*'n' must be an integer.*");
+        }
+
+        [Fact]
+        public void McpToolRequestValidator_Should_Reject_Oversized_Freeform_Strings()
+        {
+                // Arrange
+                var validator = new McpToolRequestValidator();
+                var oversized = new string('a', 2049);
+                using var document = JsonDocument.Parse(
+                        $$"""
+                        {
+                            "name": "text_search",
+                            "arguments": {
+                                "databaseId": "db1",
+                                "containerId": "c1",
+                                "property": "title",
+                                "searchPhrase": "{{oversized}}",
+                                "n": 5
+                            }
+                        }
+                        """);
+
+                // Act
+                Action act = () => validator.ValidateToolCall(document.RootElement);
+
+                // Assert
+                act.Should().Throw<ToolInputValidationException>()
+                        .WithMessage("*'searchPhrase' exceeds the maximum length of 2048 characters.*");
+        }
+
+        [Fact]
+        public void McpToolRequestValidator_Should_Normalize_Valid_Strings()
+        {
+                // Arrange
+                var validator = new McpToolRequestValidator();
+                using var document = JsonDocument.Parse(
+                        """
+                        {
+                            "name": "list_collections",
+                            "arguments": {
+                                "databaseId": "db1"
+                            }
+                        }
+                        """);
+
+                // Act
+                var result = validator.ValidateToolCall(document.RootElement);
+
+                // Assert
+                result.ToolName.Should().Be("list_collections");
+                result.Arguments["databaseId"].Should().Be("db1");
+        }
 }

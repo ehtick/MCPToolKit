@@ -232,6 +232,7 @@ builder.Services.AddSingleton(sp =>
 // Register services for dependency injection
 builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.CosmosDbToolsService>();
 builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.AuthenticationService>();
+builder.Services.AddSingleton<AzureCosmosDB.MCP.Toolkit.Services.McpToolRequestValidator>();
 
 // Configure forwarded headers for proxy scenarios
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -326,6 +327,8 @@ app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/index.html"));
 
 app.Run();
+
+public partial class Program;
 
 [McpServerToolType]
 public static class CosmosDbTools
