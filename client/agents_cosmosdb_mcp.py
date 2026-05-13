@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 project_endpoint = os.getenv("PROJECT_ENDPOINT")
-model_deployment = "gpt-4o"
+model_deployment = os.getenv("MODEL_DEPLOYMENT_NAME")
 connection_name = os.getenv("CONNECTION_NAME")
 
 # Get MCP server configuration from environment variables
