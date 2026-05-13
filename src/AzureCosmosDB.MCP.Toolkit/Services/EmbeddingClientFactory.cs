@@ -18,20 +18,32 @@ public static class EmbeddingClientFactory
     /// </summary>
     public static AzureOpenAIClient CreateEmbeddingClient(IConfiguration configuration, ILogger logger)
     {
-        var endpoint = configuration["OPENAI_ENDPOINT"] 
-            ?? Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
+        var endpoint = (configuration["OPENAI_ENDPOINT"]
+            ?? Environment.GetEnvironmentVariable("OPENAI_ENDPOINT") ?? string.Empty).Trim();
 
         if (string.IsNullOrWhiteSpace(endpoint))
         {
             throw new InvalidOperationException(
                 "OPENAI_ENDPOINT environment variable must be set. " +
-                "For local development, set OPENAI_ENDPOINT to your local Foundry or OpenAI endpoint URL. " +
-                "For cloud production, set OPENAI_ENDPOINT to your Azure OpenAI resource endpoint.");
+                "Set it to your Azure AI Services account endpoint, e.g. https://<resource>.cognitiveservices.azure.com/");
+        }
+
+        // Reject Foundry project-style URLs — they are not supported by AzureOpenAIClient.
+        // Valid account endpoint shape: https://<resource>.cognitiveservices.azure.com/
+        // Invalid project URL shape:   https://<resource>.services.ai.azure.com/api/projects/<name>
+        if (endpoint.Contains("/api/projects/", StringComparison.OrdinalIgnoreCase) ||
+            endpoint.Contains(".services.ai.azure.com", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"OPENAI_ENDPOINT appears to be a Microsoft Foundry project URL ('{endpoint}'). " +
+                "This is not supported. Use the Azure AI Services account endpoint instead, " +
+                "e.g. https://<resource>.cognitiveservices.azure.com/ — " +
+                "find it in the Azure portal under your Cognitive Services / AI Services resource overview.");
         }
 
         // Check for API key first (local development or scenarios where key is available)
-        var apiKey = configuration["OPENAI_API_KEY"] 
-            ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        var apiKey = (configuration["OPENAI_API_KEY"]
+            ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? string.Empty).Trim();
 
         if (!string.IsNullOrWhiteSpace(apiKey))
         {

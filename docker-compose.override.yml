@@ -1,12 +1,11 @@
 # Docker Compose override for local development
 # This file extends docker-compose.yml for development scenarios
 
-version: '3.8'
-
 services:
   mcp-toolkit:
     build:
-      target: base  # Use the base stage for faster development builds
+      context: .
+      dockerfile: Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_LOGGING__LOGLEVEL__DEFAULT=Debug

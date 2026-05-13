@@ -224,6 +224,12 @@ builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.CosmosDbToolsServi
 builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.AuthenticationService>();
 builder.Services.AddSingleton<AzureCosmosDB.MCP.Toolkit.Services.McpToolRequestValidator>();
 
+// Register MCP server with SDK transport (SSE + Streamable HTTP) for AI Foundry and other MCP clients.
+// Tools are defined below using [McpServerTool] attributes on CosmosDbMcpTools class.
+builder.Services.AddMcpServer()
+    .WithHttpTransport()
+    .WithToolsFromAssembly();
+
 // Configure forwarded headers for proxy scenarios
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -309,9 +315,17 @@ if (isDevelopment || devBypassAuth)
 // Map controllers last
 app.MapControllers();
 
-// Note: Commenting out built-in MCP endpoint to use custom controller
-// Map MCP endpoints with specific path
-// app.MapMcp("/mcp");
+// Map MCP SDK endpoint at /mcp — provides SSE transport (GET /mcp) and Streamable HTTP (POST /mcp).
+// This is what AI Foundry, Claude Desktop, and other standard MCP clients connect to.
+// The custom /mcp/http controller endpoint is retained for the built-in web UI tester.
+if (!devBypassAuth)
+{
+    app.MapMcp("/mcp").RequireAuthorization();
+}
+else
+{
+    app.MapMcp("/mcp");
+}
 
 // Add a simple root endpoint as fallback
 app.MapGet("/", () => Results.Redirect("/index.html"));
@@ -325,8 +339,9 @@ public static class CosmosDbTools
 {
     // Environment variables used:
     // COSMOS_ENDPOINT - Cosmos DB account endpoint
-    // OPENAI_ENDPOINT - Microsoft Foundry project endpoint (or legacy Azure OpenAI endpoint)
-    // OPENAI_EMBEDDING_DEPLOYMENT - Embedding model deployment name in Microsoft Foundry/OpenAI
+    // OPENAI_ENDPOINT - Azure AI Services account endpoint, e.g. https://<resource>.cognitiveservices.azure.com/
+    //                   Do NOT use Foundry project URLs (https://*.services.ai.azure.com/api/projects/...)
+    // OPENAI_EMBEDDING_DEPLOYMENT - Embedding model deployment name (e.g. text-embedding-3-small)
     // Auth uses Entra ID via DefaultAzureCredential (supports Managed Identity and service principals).
 
     [McpServerTool, Description("Lists databases available in the Cosmos DB account.")]
@@ -727,7 +742,7 @@ public static class CosmosDbTools
         {
             // Validate environment variables
             var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-            // OPENAI_ENDPOINT can be either a Microsoft Foundry project endpoint or legacy Azure OpenAI endpoint
+            // OPENAI_ENDPOINT must be the Azure AI Services account endpoint, not a Foundry project URL
             // Microsoft Foundry projects expose OpenAI-compatible endpoints (recommended)
             var openaiEndpoint = Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
             var embeddingDeployment = Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
@@ -824,7 +839,7 @@ public static class CosmosDbTools
 
             // Build vector search query - prepend "c." to vectorProperty as well
             var queryText = $@"
-                SELECT TOP @topN {selectClause}, VectorDistance(c.{vectorProperty}, @embedding) as _score
+                SELECT TOP @topN {selectClause}, VectorDistance(c.{vectorProperty}, @embedding) as score
                 FROM c
                 ORDER BY VectorDistance(c.{vectorProperty}, @embedding)";
 

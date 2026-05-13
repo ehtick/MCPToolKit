@@ -7,7 +7,7 @@ using AzureCosmosDB.MCP.Toolkit.Services;
 namespace AzureCosmosDB.MCP.Toolkit.Controllers;
 
 [ApiController]
-[Route("mcp")]
+[Route("mcp/http")]
 public class MCPProtocolController : ControllerBase
 {
     private readonly CosmosDbToolsService _cosmosDbTools;
@@ -267,7 +267,17 @@ public class MCPProtocolController : ControllerBase
                     {
                         _logger.LogWarning("User does not have Mcp.Tool.Executor role. User roles: {Roles}", 
                             string.Join(", ", User.Claims.Where(c => c.Type == "roles" || c.Type.EndsWith("/role")).Select(c => c.Value)));
-                        return Forbid("Insufficient permissions. The 'Mcp.Tool.Executor' role is required to execute tools.");
+                        return StatusCode(403, new MCPResponse
+                        {
+                            JsonRpc = "2.0",
+                            Id = id,
+                            Error = new
+                            {
+                                code = -32001,
+                                message = "Forbidden",
+                                data = "The 'Mcp.Tool.Executor' role is required to execute tools. Assign this app role to the calling user or service principal in Entra ID."
+                            }
+                        });
                     }
 
                     if (!paramsObj.HasValue)

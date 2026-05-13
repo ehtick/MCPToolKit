@@ -3,6 +3,7 @@ using System.Text.Json;
 using Azure.Identity;
 using System.Text.RegularExpressions;
 using Azure.AI.OpenAI;
+using Azure;
 
 namespace AzureCosmosDB.MCP.Toolkit.Services;
 
@@ -325,6 +326,11 @@ public class CosmosDbToolsService
             try
             {
                 _logger.LogInformation("Creating embedding client for embedding generation");
+
+                var configuredApiKey = _configuration["OPENAI_API_KEY"]
+                    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+                var authMode = string.IsNullOrWhiteSpace(configuredApiKey) ? "azure-credential" : "api-key";
+                _logger.LogInformation("Embedding authentication mode: {AuthMode}", authMode);
                 
                 var openaiClient = EmbeddingClientFactory.CreateEmbeddingClient(_configuration, _logger);
                 
@@ -359,6 +365,24 @@ public class CosmosDbToolsService
                 embedding = embeddingResponse.Value.ToFloats().ToArray();
                 _logger.LogInformation("Generated embedding with {Dimensions} dimensions", embedding.Length);
             }
+            catch (RequestFailedException ex) when (ex.Status == 401 || ex.Status == 403)
+            {
+                var configuredApiKey = _configuration["OPENAI_API_KEY"]
+                    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+                var usingApiKey = !string.IsNullOrWhiteSpace(configuredApiKey);
+
+                var hint = usingApiKey
+                    ? "OPENAI_API_KEY is configured. Verify the key matches OPENAI_ENDPOINT and has permission to use OPENAI_EMBEDDING_DEPLOYMENT."
+                    : "OPENAI_API_KEY is not configured. The service is using DefaultAzureCredential. Ensure the runtime identity has OpenAI data-plane access (for example, Cognitive Services OpenAI User) on the target resource.";
+
+                _logger.LogError(ex, "Embedding authorization failed with status {StatusCode}. Hint: {Hint}", ex.Status, hint);
+                return new
+                {
+                    error = $"Failed to generate embedding: {ex.Message}",
+                    statusCode = ex.Status,
+                    hint
+                };
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to generate embedding");
@@ -370,7 +394,7 @@ public class CosmosDbToolsService
             var selectClause = string.Join(", ", properties.Select(p => $"c.{p}"));
 
             var queryText = $@"
-                SELECT TOP @topN {selectClause}, VectorDistance(c.{vectorProperty}, @embedding) as _score
+                SELECT TOP @topN {selectClause}, VectorDistance(c.{vectorProperty}, @embedding) as score
                 FROM c
                 ORDER BY VectorDistance(c.{vectorProperty}, @embedding)";
 

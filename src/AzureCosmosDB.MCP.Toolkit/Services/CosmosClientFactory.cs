@@ -1,5 +1,6 @@
 using Azure.Identity;
 using Microsoft.Azure.Cosmos;
+using System.Net.Http;
 
 namespace AzureCosmosDB.MCP.Toolkit.Services;
 
@@ -9,6 +10,38 @@ namespace AzureCosmosDB.MCP.Toolkit.Services;
 /// </summary>
 public static class CosmosClientFactory
 {
+    private static CosmosClientOptions BuildClientOptions(IConfiguration configuration, ILogger logger, bool useGatewayMode)
+    {
+        var options = new CosmosClientOptions
+        {
+            ApplicationName = "AzureCosmosDBMCP",
+            EnableContentResponseOnWrite = false,
+            RequestTimeout = TimeSpan.FromSeconds(60)
+        };
+
+        if (useGatewayMode)
+        {
+            // Emulator/local scenarios are more reliable over HTTPS gateway mode.
+            options.ConnectionMode = ConnectionMode.Gateway;
+        }
+
+        var sslVerifySetting = configuration["COSMOS_EMULATOR_SSL_VERIFY"]
+            ?? Environment.GetEnvironmentVariable("COSMOS_EMULATOR_SSL_VERIFY");
+
+        if (!string.IsNullOrWhiteSpace(sslVerifySetting)
+            && bool.TryParse(sslVerifySetting, out var sslVerify)
+            && !sslVerify)
+        {
+            logger.LogWarning("COSMOS_EMULATOR_SSL_VERIFY=false detected. TLS certificate validation is disabled for Cosmos DB emulator connections.");
+            options.HttpClientFactory = () => new HttpClient(new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
+        }
+
+        return options;
+    }
+
     /// <summary>
     /// Create a CosmosClient with fallback support for connection strings and Azure credentials.
     /// 
@@ -25,12 +58,7 @@ public static class CosmosClientFactory
         if (!string.IsNullOrWhiteSpace(connectionString))
         {
             logger.LogInformation("Creating CosmosClient using connection string (emulator/local mode)");
-            return new CosmosClient(connectionString, new CosmosClientOptions
-            {
-                ApplicationName = "AzureCosmosDBMCP",
-                EnableContentResponseOnWrite = false,
-                RequestTimeout = TimeSpan.FromSeconds(60)
-            });
+            return new CosmosClient(connectionString, BuildClientOptions(configuration, logger, useGatewayMode: true));
         }
 
         // Fall back to Azure credentials for cloud production
@@ -48,11 +76,6 @@ public static class CosmosClientFactory
         logger.LogInformation("Creating CosmosClient using Azure credentials (cloud mode)");
         var credential = new DefaultAzureCredential();
 
-        return new CosmosClient(endpoint, credential, new CosmosClientOptions
-        {
-            ApplicationName = "AzureCosmosDBMCP",
-            EnableContentResponseOnWrite = false,
-            RequestTimeout = TimeSpan.FromSeconds(60)
-        });
+        return new CosmosClient(endpoint, credential, BuildClientOptions(configuration, logger, useGatewayMode: false));
     }
 }
