@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using System.Text;
 using AzureCosmosDB.MCP.Toolkit.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -256,20 +257,25 @@ app.Use(async (context, next) =>
     var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
     var path = context.Request.Path.Value ?? "";
     var method = context.Request.Method;
-    var userAgent = context.Request.Headers["User-Agent"].ToString();
+    var rawUserAgent = context.Request.Headers["User-Agent"].ToString();
+    var userAgent = Program.NormalizeUserAgentForTelemetry(
+        rawUserAgent,
+        out var userAgentOriginalLength,
+        out var userAgentWasTruncated,
+        out var userAgentControlCharsRemoved);
     var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     
-    // Log all requests with User-Agent for analytics
+    // Log a normalized, bounded User-Agent value to reduce telemetry/dashboard abuse risk.
     logger.LogInformation(
-        "Request: {Method} {Path} | User-Agent: {UserAgent} | Client-IP: {ClientIp}", 
-        method, path, string.IsNullOrEmpty(userAgent) ? "Not-Specified" : userAgent, clientIp);
+        "Request: {Method} {Path} | User-Agent: {UserAgent} | UA-Original-Length: {UserAgentOriginalLength} | UA-Truncated: {UserAgentWasTruncated} | UA-ControlChars-Removed: {UserAgentControlCharsRemoved} | Client-IP: {ClientIp}", 
+        method, path, userAgent, userAgentOriginalLength, userAgentWasTruncated, userAgentControlCharsRemoved, clientIp);
     
     // Detailed logging for MCP endpoints
     if (path.StartsWith("/mcp", StringComparison.OrdinalIgnoreCase))
     {
         logger.LogInformation("=== MCP REQUEST DETAILS ===");
         logger.LogInformation("Method: {Method}, Path: {Path}", method, path);
-        logger.LogInformation("User-Agent: {UserAgent}", string.IsNullOrEmpty(userAgent) ? "Not-Specified" : userAgent);
+        logger.LogInformation("User-Agent: {UserAgent}", userAgent);
         logger.LogInformation("Client-IP: {ClientIp}", clientIp);
         
         // Log other relevant headers (excluding sensitive data)
@@ -332,7 +338,50 @@ app.MapGet("/", () => Results.Redirect("/index.html"));
 
 app.Run();
 
-public partial class Program;
+public partial class Program
+{
+    private const int MaxUserAgentLength = 256;
+
+    public static string NormalizeUserAgentForTelemetry(string? userAgent, out int originalLength, out bool wasTruncated, out int controlCharsRemoved)
+    {
+        originalLength = userAgent?.Length ?? 0;
+        wasTruncated = false;
+        controlCharsRemoved = 0;
+
+        if (string.IsNullOrWhiteSpace(userAgent))
+        {
+            return "Not-Specified";
+        }
+
+        var normalized = userAgent.Normalize(NormalizationForm.FormKC);
+        var sb = new StringBuilder(normalized.Length);
+
+        foreach (var ch in normalized)
+        {
+            if (char.IsControl(ch))
+            {
+                controlCharsRemoved++;
+                continue;
+            }
+
+            sb.Append(ch);
+        }
+
+        var sanitized = sb.ToString().Trim();
+        if (sanitized.Length == 0)
+        {
+            return "Not-Specified";
+        }
+
+        if (sanitized.Length > MaxUserAgentLength)
+        {
+            wasTruncated = true;
+            sanitized = sanitized[..MaxUserAgentLength];
+        }
+
+        return sanitized;
+    }
+}
 
 [McpServerToolType]
 public static class CosmosDbTools
