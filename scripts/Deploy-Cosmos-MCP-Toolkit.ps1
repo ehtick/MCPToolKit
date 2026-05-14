@@ -797,7 +797,7 @@ function Build-And-Push-Image {
             dotnet publish src/AzureCosmosDB.MCP.Toolkit/AzureCosmosDB.MCP.Toolkit.csproj -c Release -o src/AzureCosmosDB.MCP.Toolkit/bin/publish
 
             Write-Info "Building image: $IMAGE_TAG"
-            docker build -t $IMAGE_TAG -f Dockerfile .
+            docker build --platform linux/amd64 -t $IMAGE_TAG -f Dockerfile.runtime .
             
             if ($LASTEXITCODE -ne 0) {
                 throw "Docker build failed with exit code $LASTEXITCODE"

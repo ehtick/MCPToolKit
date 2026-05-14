@@ -1,13 +1,9 @@
 # Import necessary libraries
 
-import os, time
+import os
 from azure.ai.projects import AIProjectClient
+from azure.ai.projects.models import PromptAgentDefinition, MCPTool
 from azure.identity import AzureCliCredential
-from azure.ai.agents.models import (
-    ListSortOrder,
-    SubmitToolOutputsAction,
-    ToolOutput
-)
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -17,43 +13,30 @@ model_deployment = os.getenv("MODEL_DEPLOYMENT_NAME")
 connection_name = os.getenv("CONNECTION_NAME")
 
 # Get MCP server configuration from environment variables
-mcp_server_url = os.environ.get("MCP_SERVER_URL", "https://mcp-toolkit-app.icywave-532ba7dd.westus2.azurecontainerapps.io/mcp")
-mcp_server_label = os.environ.get("MCP_SERVER_LABEL", "cosmosdb")
+mcp_server_url = os.environ.get("MCP_SERVER_URL")
+mcp_server_label = os.environ.get("MCP_SERVER_LABEL" )
+
+# Agent configuration
+agent_name = os.environ.get("AGENT_NAME")
 
 project_client = AIProjectClient(
     endpoint=project_endpoint,
     credential=AzureCliCredential(),
 )
 
-# Initialize agent MCP tool
-mcp_tool_config = {
-    "type": "mcp",
-    "server_url": mcp_server_url,
-    "server_label": mcp_server_label,
-    "server_authentication": {
-        "type": "connection",
-        "connection_name": connection_name,
-    }
-}
+# Initialize MCP tool
+mcp_tool = MCPTool(
+    server_label=mcp_server_label,
+    server_url=mcp_server_url,
+    require_approval="never",
+    project_connection_id=connection_name,
+)
 
-mcp_tool_resources = {
-    "mcp": [
-        {
-            "server_label": mcp_server_label,
-            "require_approval": "never"
-        }
-    ]
-}
-
-# Create agent with MCP tool and process agent run
-with project_client:
-    agents_client = project_client.agents
-
-    # Create a new agent.
-    # NOTE: To reuse existing agent, fetch it with get_agent(agent_id)
-    agent = agents_client.create_agent(
+# Create the agent with MCP tool
+agent = project_client.agents.create_version(
+    agent_name=agent_name,
+    definition=PromptAgentDefinition(
         model=model_deployment,
-        name="cosmosdb-demo-agent-mcp",
         instructions="""
         You are a helpful agent that can use MCP tools to assist users with Azure Cosmos DB queries.
         
@@ -69,121 +52,49 @@ with project_client:
         When a user asks about their data, use these tools to explore and query the Cosmos DB database.
         Always be helpful and explain what you're doing.
         """,
-        tools=[mcp_tool_config],
-    )
+        tools=[mcp_tool],
+    ),
+)
+print(f"Agent created (name: {agent.name}, version: {agent.version})")
+print(f"MCP Server: {mcp_server_label} at {mcp_server_url}")
 
-    print(f"Created agent, ID: {agent.id}")
-    print(f"MCP Server: {mcp_server_label} at {mcp_server_url}")
+# Sample questions for testing
+input_text = [
+    "Can you list all the databases in my Cosmos DB account?",
+    "Show me the containers in the first database",
+    "What does the schema look like for the first container?",
+    "Get me the 5 most recent documents from the first container",
+    "Search for documents containing 'test' in the name property",
+]
 
-    # Create thread for communication
-    thread = agents_client.threads.create()
-    print(f"Created thread, ID: {thread.id}")
+# Use the Responses API via OpenAI client
+openai_client = project_client.get_openai_client()
 
-    # Sample questions for testing
-    input_text = [
-        "Can you list all the databases in my Cosmos DB account?",
-        "Show me the containers in the first database",
-        "What does the schema look like for the first container?",
-        "Get me the 5 most recent documents from the first container",
-        "Search for documents containing 'test' in the name property",
-    ]
+# Create a conversation for multi-turn context
+conversation = openai_client.conversations.create()
+print(f"Created conversation (id: {conversation.id})")
 
-    # Create message to thread - using the first question
-    message = agents_client.messages.create(
-        thread_id=thread.id,
-        role="user",
-        content=input_text[0]  # Change index to test different questions
-    )
-    print(f"Created message, ID: {message.id}")
-    
-    # Create and process agent run in thread with MCP tools
-    run = agents_client.runs.create(thread_id=thread.id, agent_id=agent.id, tool_resources=mcp_tool_resources)
-    print(f"Created run, ID: {run.id}")
+print(f"Question: {input_text[0]}")
 
-    while run.status in ["queued", "in_progress", "requires_action"]:
-        time.sleep(1)
-        run = agents_client.runs.get(thread_id=thread.id, run_id=run.id)
+response = openai_client.responses.create(
+    conversation=conversation.id,
+    input=input_text[0],  # Change index to test different questions
+    extra_body={
+        "agent_reference": {
+            "name": agent.name,
+            "type": "agent_reference",
+        }
+    },
+)
 
-        if run.status == "requires_action":
-            if isinstance(run.required_action, SubmitToolOutputsAction):
-                tool_calls = run.required_action.submit_tool_outputs.tool_calls
-                if not tool_calls:
-                    print("No tool calls provided - cancelling run")
-                    agents_client.runs.cancel(thread_id=thread.id, run_id=run.id)
-                    break
+print(f"\nResponse output: {response.output_text}")
 
-                tool_outputs = []
-                for tool_call in tool_calls:
-                    try:
-                        print(f"Processing tool call: {tool_call.id}")
-                        # For MCP tools, the output is handled by the service
-                        # We just acknowledge the tool call
-                        tool_outputs.append(
-                            ToolOutput(
-                                tool_call_id=tool_call.id,
-                                output="{}"  # Empty JSON object as placeholder
-                            )
-                        )
-                    except Exception as e:
-                        print(f"Error processing tool_call {tool_call.id}: {e}")
+# Display tool calls from the response
+for item in response.output:
+    if item.type == "mcp_call":
+        print(f"\n  MCP Tool call: {item}")
 
-                print(f"tool_outputs: {tool_outputs}")
-                if tool_outputs:
-                    agents_client.runs.submit_tool_outputs(
-                        thread_id=thread.id, run_id=run.id, tool_outputs=tool_outputs
-                    )
-
-        print(f"Current run status: {run.status}")
-
-    print(f"Run completed with status: {run.status}")
-    if run.status == "failed":
-        print(f"Run failed: {run.last_error}")
-
-    # Display run steps and tool calls
-    run_steps = agents_client.run_steps.list(thread_id=thread.id, run_id=run.id)
-
-    # Loop through each step
-    for step in run_steps:
-        print(f"Step {step['id']} status: {step['status']}")
-
-        # Check if there are tool calls in the step details
-        step_details = step.get("step_details", {})
-        tool_calls = step_details.get("tool_calls", [])
-
-        if tool_calls:
-            print("  MCP Tool calls:")
-            for call in tool_calls:
-                print(f"    Tool Call ID: {call.get('id')}")
-                print(f"    Type: {call.get('type')}")
-
-        if hasattr(step_details, 'activities'):
-            for activity in step_details.activities:
-                for function_name, function_definition in activity.tools.items():
-                    print(
-                        f'  The function {function_name} with description "{function_definition.description}" will be called.:'
-                    )
-                    if len(function_definition.parameters) > 0:
-                        print("  Function parameters:")
-                        for argument, func_argument in function_definition.parameters.properties.items():
-                            print(f"      {argument}")
-                            print(f"      Type: {func_argument.type}")
-                            print(f"      Description: {func_argument.description}")
-                    else:
-                        print("This function has no parameters")
-
-        print()  # add an extra newline between steps
-
-    # Fetch and log all messages
-    messages = agents_client.messages.list(thread_id=thread.id, order=ListSortOrder.ASCENDING)
-    print("\nConversation:")
-    print("-" * 50)
-    for msg in messages:
-        if msg.text_messages:
-            last_text = msg.text_messages[-1]
-            print(f"{msg.role.upper()}: {last_text.text.value}")
-            print("-" * 50)
-
-    # Clean-up and delete the agent once the run is finished.
-    # NOTE: Comment out this line if you plan to reuse the agent later.
-    # agents_client.delete_agent(agent.id)
-    # print("Deleted agent")
+# Clean-up: delete the agent version when done
+# NOTE: Comment out this line if you plan to reuse the agent later.
+# project_client.agents.delete_version(agent_name=agent.name, agent_version=agent.version)
+# print("Agent deleted")
