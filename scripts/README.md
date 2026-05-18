@@ -11,12 +11,18 @@ The main deployment script that provisions all Azure resources and deploys the M
 **Usage:**
 ```powershell
 .\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP" -Location "eastus"
+
+# Use Cosmos and ACR from different resource groups
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "aca-rg" -CosmosResourceGroup "cosmos-rg" -AcrResourceGroup "acr-rg" -AcrName "mysharedacr"
 ```
 
 **Parameters:**
 - `-ResourceGroup` (Required): Name of the Azure resource group
 - `-Location` (Optional): Azure region (default: eastus)
 - `-CosmosAccountName` (Optional): Name for Cosmos DB account (auto-generated if not provided)
+- `-CosmosResourceGroup` (Optional): Resource group containing Cosmos DB (defaults to `-ResourceGroup`)
+- `-AcrResourceGroup` (Optional): Resource group containing ACR (defaults to `-ResourceGroup`)
+- `-AcrName` (Optional): Existing ACR name to use (auto-detected in `-AcrResourceGroup` when omitted for external ACR)
 - `-ContainerAppName` (Optional): Name for Container App (auto-generated if not provided)
 - `-EntraAppName` (Optional): Name of existing Entra App (skips app creation)
 - `-ServiceManagementReference` (Optional): GUID for service management reference

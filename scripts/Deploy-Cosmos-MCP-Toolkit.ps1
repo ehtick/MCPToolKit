@@ -16,6 +16,12 @@
     Azure region for deployment (default: eastus)
 .PARAMETER CosmosAccountName
     Name of the Cosmos DB account (default: cosmosmcpkit)
+.PARAMETER CosmosResourceGroup
+    Resource group containing the Cosmos DB account (default: same as ResourceGroup)
+.PARAMETER AcrResourceGroup
+    Resource group containing Azure Container Registry (default: same as ResourceGroup)
+.PARAMETER AcrName
+    Existing Azure Container Registry name to use (optional)
 .PARAMETER ContainerAppName
     Name of the container app (default: mcp-toolkit-app)
 .PARAMETER EntraAppName
@@ -27,6 +33,8 @@
     ./Deploy-Cosmos-MCP-Server.ps1 -ResourceGroup "my-project" -Location "westus2" -CosmosAccountName "mycosmosdb"
 .EXAMPLE
     ./Deploy-Cosmos-MCP-Server.ps1 -ResourceGroup "my-rg" -EntraAppName "My Custom MCP App"
+.EXAMPLE
+    ./Deploy-Cosmos-MCP-Server.ps1 -ResourceGroup "aca-rg" -CosmosResourceGroup "cosmos-rg" -AcrResourceGroup "acr-rg" -AcrName "mysharedacr"
 #>
 
 param(
@@ -38,6 +46,15 @@ param(
     
     [Parameter(Mandatory=$false)]
     [string]$CosmosAccountName = "",
+
+    [Parameter(Mandatory=$false)]
+    [string]$CosmosResourceGroup = "",
+
+    [Parameter(Mandatory=$false)]
+    [string]$AcrResourceGroup = "",
+
+    [Parameter(Mandatory=$false)]
+    [string]$AcrName = "",
     
     [Parameter(Mandatory=$false)]
     [string]$ContainerAppName = "",
@@ -73,12 +90,12 @@ function Auto-Detect-Resources {
     
     # Auto-detect Cosmos DB account
     if ([string]::IsNullOrEmpty($script:CosmosAccountName)) {
-        $cosmosAccounts = az cosmosdb list --resource-group $ResourceGroup --query "[].name" -o tsv
+        $cosmosAccounts = az cosmosdb list --resource-group $script:COSMOS_RESOURCE_GROUP --query "[].name" -o tsv
         if ($cosmosAccounts) {
             $script:CosmosAccountName = ($cosmosAccounts -split "`n")[0].Trim()
             Write-Info "Auto-detected Cosmos DB account: $script:CosmosAccountName"
         } else {
-            Write-Error "No Cosmos DB account found in resource group $ResourceGroup"
+            Write-Error "No Cosmos DB account found in resource group $($script:COSMOS_RESOURCE_GROUP)"
             exit 1
         }
     }
@@ -94,6 +111,19 @@ function Auto-Detect-Resources {
             exit 1
         }
     }
+
+    # Auto-detect ACR only when using an external/different resource group and AcrName is not provided
+    if ([string]::IsNullOrEmpty($script:ACR_NAME) -and $script:USE_EXISTING_ACR) {
+        $registries = az acr list --resource-group $script:ACR_RESOURCE_GROUP --query "[].name" -o tsv
+        if ($registries) {
+            $script:ACR_NAME = ($registries -split "`n")[0].Trim()
+            Write-Info "Auto-detected ACR: $($script:ACR_NAME)"
+        }
+        else {
+            Write-Error "No ACR registry found in resource group $($script:ACR_RESOURCE_GROUP). Provide -AcrName explicitly."
+            exit 1
+        }
+    }
 }
 
 function Show-Usage {
@@ -103,6 +133,9 @@ function Show-Usage {
     Write-Host "  -ResourceGroup           Azure Resource Group name for deployment"
     Write-Host "  -Location               Azure region for deployment (optional, defaults to eastus)"
     Write-Host "  -CosmosAccountName      Name of the Cosmos DB account (optional, defaults to cosmosmcpkit)"
+    Write-Host "  -CosmosResourceGroup    Resource group for Cosmos DB account (optional, defaults to ResourceGroup)"
+    Write-Host "  -AcrResourceGroup       Resource group for ACR (optional, defaults to ResourceGroup)"
+    Write-Host "  -AcrName                Existing ACR name to use (optional)"
     Write-Host "  -ContainerAppName       Name of the container app (optional, defaults to mcp-toolkit-app)"
     Write-Host ""
     exit 1
@@ -114,10 +147,20 @@ function Parse-Arguments {
     $script:LOCATION = $Location
     $script:CosmosAccountName = $CosmosAccountName
     $script:ContainerAppName = $ContainerAppName
+    $script:COSMOS_RESOURCE_GROUP = if ([string]::IsNullOrWhiteSpace($CosmosResourceGroup)) { $ResourceGroup } else { $CosmosResourceGroup }
+    $script:ACR_RESOURCE_GROUP = if ([string]::IsNullOrWhiteSpace($AcrResourceGroup)) { $ResourceGroup } else { $AcrResourceGroup }
+    $script:ACR_NAME = $AcrName
+    $script:USE_EXISTING_ACR = ($script:ACR_RESOURCE_GROUP -ne $ResourceGroup) -or (-not [string]::IsNullOrWhiteSpace($script:ACR_NAME))
     
     Write-Info "Using Azure Resource Group: $ResourceGroup"
     Write-Info "Using Location: $Location"
     Write-Info "Using Cosmos Account Name: $CosmosAccountName"
+    Write-Info "Using Cosmos Resource Group: $($script:COSMOS_RESOURCE_GROUP)"
+    Write-Info "Using ACR Resource Group: $($script:ACR_RESOURCE_GROUP)"
+    Write-Info "Using Existing ACR: $($script:USE_EXISTING_ACR)"
+    if (-not [string]::IsNullOrWhiteSpace($script:ACR_NAME)) {
+        Write-Info "Using ACR Name: $($script:ACR_NAME)"
+    }
     Write-Info "Using Container App Name: $ContainerAppName"
 }
 
@@ -729,6 +772,24 @@ function Verify-Resource-Group {
     }
     
     Write-Info "Resource group verified successfully"
+
+    if ($script:COSMOS_RESOURCE_GROUP -ne $ResourceGroup) {
+        Write-Info "Verifying Cosmos resource group exists: $($script:COSMOS_RESOURCE_GROUP)"
+        $cosmosRgExists = az group exists --name $script:COSMOS_RESOURCE_GROUP
+        if ($cosmosRgExists -eq "false") {
+            Write-Error "Cosmos resource group '$($script:COSMOS_RESOURCE_GROUP)' does not exist."
+            exit 1
+        }
+    }
+
+    if ($script:ACR_RESOURCE_GROUP -ne $ResourceGroup) {
+        Write-Info "Verifying ACR resource group exists: $($script:ACR_RESOURCE_GROUP)"
+        $acrRgExists = az group exists --name $script:ACR_RESOURCE_GROUP
+        if ($acrRgExists -eq "false") {
+            Write-Error "ACR resource group '$($script:ACR_RESOURCE_GROUP)' does not exist."
+            exit 1
+        }
+    }
 }
 
 function Deploy-Infrastructure {
@@ -750,7 +811,12 @@ function Deploy-Infrastructure {
     Write-Info "Creating Azure Container resources..."
     Write-Info "Note: Initial deployment may show as 'Failed' - this is expected and will be fixed after ACR permissions are assigned"
 
-    az deployment group create --resource-group $ResourceGroup --template-file "infrastructure/main.bicep" --output table
+    if ($script:USE_EXISTING_ACR) {
+        az deployment group create --resource-group $ResourceGroup --template-file "infrastructure/main.bicep" --parameters "useExistingAcr=true" "existingAcrName=$($script:ACR_NAME)" "existingAcrResourceGroup=$($script:ACR_RESOURCE_GROUP)" --output table
+    }
+    else {
+        az deployment group create --resource-group $ResourceGroup --template-file "infrastructure/main.bicep" --output table
+    }
 
     Write-Info "Azure Container resources deployment completed!"
 }
@@ -759,7 +825,11 @@ function Get-Deployment-Outputs {
     Write-Info "Getting deployment outputs..."
 
     # Get ACR and Container App details
-    $acrName = az acr list --resource-group $ResourceGroup --query "[0].name" -o tsv
+    $acrName = $script:ACR_NAME
+    if ([string]::IsNullOrWhiteSpace($acrName)) {
+        $acrName = az acr list --resource-group $script:ACR_RESOURCE_GROUP --query "[0].name" -o tsv
+        $script:ACR_NAME = $acrName
+    }
     $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
     
     $script:CONTAINER_REGISTRY = "$acrName.azurecr.io"
@@ -778,7 +848,7 @@ function Build-And-Push-Image {
 
     try {
         # Login to ACR - specify resource group to avoid auto-discovery issues
-        az acr login --name $ACR_NAME --resource-group $script:RESOURCE_GROUP
+        az acr login --name $ACR_NAME --resource-group $script:ACR_RESOURCE_GROUP
         
         if ($LASTEXITCODE -ne 0) {
             throw "ACR login failed with exit code $LASTEXITCODE"
@@ -840,7 +910,7 @@ function Update-Container-App {
     Write-Info "Current Tenant ID: $CURRENT_TENANT_ID"
 
     # Get Cosmos DB endpoint
-    $cosmosEndpoint = az cosmosdb show --name $CosmosAccountName --resource-group $ResourceGroup --query "documentEndpoint" --output tsv
+    $cosmosEndpoint = az cosmosdb show --name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --query "documentEndpoint" --output tsv
     Write-Info "Cosmos DB Endpoint: $cosmosEndpoint"
     
     # Get Container App to extract existing environment variables
@@ -958,10 +1028,14 @@ function Update-Container-App {
     
     # Get ACR credentials and configure registry
     Write-Info "Configuring ACR credentials for container app..."
-    $acrName = az acr list --resource-group $ResourceGroup --query "[0].name" -o tsv
-    $acrLoginServer = az acr show --name $acrName --resource-group $ResourceGroup --query "loginServer" -o tsv
-    $acrUsername = az acr credential show --name $acrName --resource-group $ResourceGroup --query "username" -o tsv
-    $acrPassword = az acr credential show --name $acrName --resource-group $ResourceGroup --query "passwords[0].value" -o tsv
+    $acrName = $script:ACR_NAME
+    if ([string]::IsNullOrWhiteSpace($acrName)) {
+        $acrName = az acr list --resource-group $script:ACR_RESOURCE_GROUP --query "[0].name" -o tsv
+        $script:ACR_NAME = $acrName
+    }
+    $acrLoginServer = az acr show --name $acrName --resource-group $script:ACR_RESOURCE_GROUP --query "loginServer" -o tsv
+    $acrUsername = az acr credential show --name $acrName --resource-group $script:ACR_RESOURCE_GROUP --query "username" -o tsv
+    $acrPassword = az acr credential show --name $acrName --resource-group $script:ACR_RESOURCE_GROUP --query "passwords[0].value" -o tsv
     
     Write-Info "ACR Login Server: $acrLoginServer"
     Write-Info "ACR Username: $acrUsername"
@@ -1106,13 +1180,13 @@ function Assign-Cosmos-RBAC {
     
     # Assign Cosmos DB Data Reader role
     Write-Info "Assigning Cosmos DB Data Reader role..."
-    $cosmosResourceId = "/subscriptions/$((az account show --query id -o tsv))/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccountName"
+    $cosmosResourceId = "/subscriptions/$((az account show --query id -o tsv))/resourceGroups/$($script:COSMOS_RESOURCE_GROUP)/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccountName"
     $roleDefinitionId = "00000000-0000-0000-0000-000000000001"
 
-    $existingAssignment = az cosmosdb sql role assignment list --account-name $CosmosAccountName --resource-group $ResourceGroup --query "[?principalId=='$ACA_MI_PRINCIPAL_ID']" | ConvertFrom-Json
+    $existingAssignment = az cosmosdb sql role assignment list --account-name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --query "[?principalId=='$ACA_MI_PRINCIPAL_ID']" | ConvertFrom-Json
 
     if ($existingAssignment.Count -eq 0) {
-        az cosmosdb sql role assignment create --account-name $CosmosAccountName --resource-group $ResourceGroup --role-definition-id $roleDefinitionId --principal-id $ACA_MI_PRINCIPAL_ID --scope $cosmosResourceId
+        az cosmosdb sql role assignment create --account-name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --role-definition-id $roleDefinitionId --principal-id $ACA_MI_PRINCIPAL_ID --scope $cosmosResourceId
         Write-Info "Successfully assigned Cosmos DB Data Reader role to Container App MI"
     } else {
         Write-Info "Cosmos DB Data Reader role assignment already exists"
@@ -1357,6 +1431,9 @@ function Show-Deployment-Summary {
         ACA_MI_PRINCIPAL_ID = $script:ACA_MI_PRINCIPAL_ID
         ACA_MI_DISPLAY_NAME = $script:ACA_MI_DISPLAY_NAME
         RESOURCE_GROUP = $ResourceGroup
+        COSMOS_RESOURCE_GROUP = $script:COSMOS_RESOURCE_GROUP
+        ACR_RESOURCE_GROUP = $script:ACR_RESOURCE_GROUP
+        ACR_NAME = $script:ACR_NAME
         SUBSCRIPTION_ID = (az account show --query id -o tsv)
         TENANT_ID = (az account show --query tenantId -o tsv)
         COSMOS_ACCOUNT_NAME = $CosmosAccountName

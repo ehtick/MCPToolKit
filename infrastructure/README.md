@@ -46,6 +46,18 @@ az deployment group create \
     "aifProjectEndpoint=https://your-aif-project.openai.azure.com/" \
     "embeddingDeploymentName=text-embedding-ada-002" \
     "embeddingDimensions=1536"  # Optional: defaults to 1536 if not specified
+
+# Optional: use an existing ACR in another resource group
+az deployment group create \
+  --resource-group "mcp-toolkit-rg" \
+  --template-file "deploy-all-resources.bicep" \
+  --parameters \
+    "cosmosEndpoint=https://yourcosmosdb.documents.azure.com:443/" \
+    "aifProjectEndpoint=https://your-aif-project.openai.azure.com/" \
+    "embeddingDeploymentName=text-embedding-ada-002" \
+    "useExistingAcr=true" \
+    "existingAcrName=mysharedacr" \
+    "existingAcrResourceGroup=shared-acr-rg"
 ```
 
 ## Post-Deployment Steps

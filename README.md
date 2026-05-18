@@ -89,7 +89,7 @@ MCPToolKit/
 
 ## Quick Start
 
-> Ensure all resources (Azure Cosmos DB, Microsoft Foundry Project, Container App) are created in the same resource group and that Docker is running before starting the deployment.
+> Resources can be in the same or different resource groups. By default, deployment assumes the same resource group unless you pass explicit Cosmos/ACR resource-group parameters.
 
 **First, clone the repository:**
 
@@ -180,6 +180,9 @@ cd MCPToolKit
 # Optional: Specify a custom Entra App name if the default name is already taken
 # or if you don't have permissions to modify the existing app
 .\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP" -EntraAppName "My Custom MCP App"
+
+# Optional: Use Cosmos DB and ACR from different resource groups
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "aca-rg" -CosmosResourceGroup "cosmos-rg" -AcrResourceGroup "acr-rg" -AcrName "mysharedacr"
 ```
 
 This script:

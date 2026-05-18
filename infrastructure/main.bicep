@@ -10,6 +10,15 @@ param environmentName string = 'mcp-toolkit-env'
 @description('Container registry name')
 param containerRegistryName string = 'mcpdemo${uniqueString(resourceGroup().id)}'
 
+@description('Use an existing Azure Container Registry instead of creating one in this resource group')
+param useExistingAcr bool = false
+
+@description('Existing ACR name (required when useExistingAcr=true)')
+param existingAcrName string = ''
+
+@description('Resource group that contains the existing ACR (optional, defaults to current resource group)')
+param existingAcrResourceGroup string = ''
+
 @description('Container image name')
 param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
@@ -46,8 +55,10 @@ param embeddingDimensions int = 0
 // NOTE: Entra App creation has been moved to the Setup-Permissions.ps1 script
 // for better reliability. The script will create the app if it doesn't exist.
 
+var resolvedAcrResourceGroup = empty(existingAcrResourceGroup) ? resourceGroup().name : existingAcrResourceGroup
+
 // Container Registry
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = if (!useExistingAcr) {
   name: containerRegistryName
   location: location
   sku: {
@@ -57,6 +68,11 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
     adminUserEnabled: true
   }
   tags: commonTags
+}
+
+resource existingContainerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = if (useExistingAcr) {
+  name: existingAcrName
+  scope: resourceGroup(resolvedAcrResourceGroup)
 }
 
 // Create Container App Environment
@@ -94,15 +110,15 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
       registries: [
         {
-          server: containerRegistry.properties.loginServer
-          username: containerRegistry.name
+          server: useExistingAcr ? existingContainerRegistry!.properties.loginServer : containerRegistry!.properties.loginServer
+          username: useExistingAcr ? existingContainerRegistry!.name : containerRegistry!.name
           passwordSecretRef: 'registry-password'
         }
       ]
       secrets: [
         {
           name: 'registry-password'
-          value: containerRegistry.listCredentials().passwords[0].value
+          value: useExistingAcr ? existingContainerRegistry!.listCredentials().passwords[0].value : containerRegistry!.listCredentials().passwords[0].value
         }
       ]
     }
@@ -203,8 +219,8 @@ output AZURE_SUBSCRIPTION_ID string = subscription().subscriptionId
 
 // Infrastructure outputs
 output RESOURCE_GROUP_NAME string = resourceGroup().name
-output CONTAINER_REGISTRY_LOGIN_SERVER string = containerRegistry.properties.loginServer
-output CONTAINER_REGISTRY_NAME string = containerRegistry.name
+output CONTAINER_REGISTRY_LOGIN_SERVER string = useExistingAcr ? existingContainerRegistry!.properties.loginServer : containerRegistry!.properties.loginServer
+output CONTAINER_REGISTRY_NAME string = useExistingAcr ? existingContainerRegistry!.name : containerRegistry!.name
 output CONTAINER_APP_NAME string = containerApp.name
 output CONTAINER_APP_URL string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output CONTAINER_APP_PRINCIPAL_ID string = containerApp.identity.principalId

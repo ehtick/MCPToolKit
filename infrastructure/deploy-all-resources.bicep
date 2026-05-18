@@ -22,6 +22,15 @@ param containerAppName string = '${resourcePrefix}-app'
 @description('Container registry name')
 param containerRegistryName string = '${replace(resourcePrefix, '-', '')}acr${uniqueString(resourceGroup().id)}'
 
+@description('Use an existing Azure Container Registry instead of creating one in this resource group')
+param useExistingAcr bool = false
+
+@description('Existing ACR name (required when useExistingAcr=true)')
+param existingAcrName string = ''
+
+@description('Resource group that contains the existing ACR (optional, defaults to current resource group)')
+param existingAcrResourceGroup string = ''
+
 @description('Entra App display name')
 param entraAppDisplayName string = '${resourcePrefix}-entra-app'
 
@@ -31,6 +40,7 @@ param aifProjectResourceId string = ''
 // Variables
 var containerAppEnvName = '${resourcePrefix}-env'
 var entraAppUniqueName = '${replace(toLower(entraAppDisplayName), ' ', '-')}-${uniqueString(deployment().name, resourceGroup().id)}'
+var resolvedAcrResourceGroup = empty(existingAcrResourceGroup) ? resourceGroup().name : existingAcrResourceGroup
 
 // Common tags for all resources
 var commonTags = {
@@ -51,7 +61,7 @@ module entraApp 'modules/entra-app.bicep' = {
 }
 
 // Create Container Registry
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = if (!useExistingAcr) {
   name: containerRegistryName
   location: location
   sku: {
@@ -61,6 +71,11 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
     adminUserEnabled: true
   }
   tags: commonTags
+}
+
+resource existingContainerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = if (useExistingAcr) {
+  name: existingAcrName
+  scope: resourceGroup(resolvedAcrResourceGroup)
 }
 
 // Create Container App Environment (without Log Analytics)
@@ -203,7 +218,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
 // RBAC Assignments
 
 // Assign ACR Pull role to container app's system-assigned managed identity
-resource acrRoleAssignmentMI 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource acrRoleAssignmentMI 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!useExistingAcr) {
   scope: containerRegistry
   name: guid(containerRegistry.id, containerApp.id, acrPullRoleId)
   properties: {
@@ -225,8 +240,8 @@ module aifRoleAssignment 'modules/aif-role-assignment-entraapp.bicep' = if (!emp
 
 // Outputs
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
-output containerRegistryName string = containerRegistry.name
-output containerRegistryLoginServer string = containerRegistry.properties.loginServer
+output containerRegistryName string = useExistingAcr ? existingContainerRegistry!.name : containerRegistry!.name
+output containerRegistryLoginServer string = useExistingAcr ? existingContainerRegistry!.properties.loginServer : containerRegistry!.properties.loginServer
 output managedIdentityPrincipalId string = containerApp.identity.principalId
 output containerAppEnvironmentId string = containerAppEnvironment.id
 output containerAppId string = containerApp.id
