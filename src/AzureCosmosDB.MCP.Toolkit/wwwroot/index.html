@@ -204,7 +204,7 @@
             position: relative;
         }
         .collapsible:after {
-            content: 'â–¼';
+            content: '';
             position: absolute;
             right: 15px;
             top: 50%;
@@ -231,7 +231,7 @@
         <h1>Azure Cosmos DB MCP Server Test</h1>
         
         <div class="auth-section">
-            <h3>ðŸ” Microsoft Entra Authentication</h3>
+            <h3> Microsoft Entra Authentication</h3>
 
             <div class="form-group">
                 <label style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
@@ -245,7 +245,7 @@
             
             <!-- Auth Error Display -->
             <div id="authError" style="display: none; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
-                <strong>âš ï¸ Authentication Error:</strong>
+                <strong> Authentication Error:</strong>
                 <div id="authErrorMessage" style="margin-top: 5px;"></div>
             </div>
             
@@ -273,7 +273,7 @@
                 </div>
                 
                 <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin-top: 15px;">
-                    <strong>âš ï¸ Important:</strong> Client ID and Tenant ID must be <strong>different</strong> values. 
+                    <strong> Important:</strong> Client ID and Tenant ID must be <strong>different</strong> values. 
                     Don't confuse them or swap their positions!
                 </div>
             </div>
@@ -285,9 +285,9 @@
             </div>
             
             <div class="button-group">
-                <button id="loginBtn" class="login-btn" onclick="login()">ðŸ”‘ Sign In with Microsoft Entra</button>
-                <button id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none;">ðŸšª Sign Out</button>
-                <button id="getTokenBtn" onclick="getTokenSilently()" style="display: none;">ðŸ”„ Refresh Token</button>
+                <button id="loginBtn" class="login-btn" onclick="login()"> Sign In with Microsoft Entra</button>
+                <button id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none;"> Sign Out</button>
+                <button id="getTokenBtn" onclick="getTokenSilently()" style="display: none;"> Refresh Token</button>
             </div>
         </div>
 
@@ -512,11 +512,11 @@
                 
                 // Check for specific error about application not found
                 if (error.message && error.message.includes('was not found in the directory')) {
-                    showError(`Application not found in directory.\n\nâŒ This usually means:\n1. The Client ID is incorrect - verify it matches your deployment-info.json\n2. You may have entered the Tenant ID in the Client ID field\n3. The Entra App hasn't been created yet - run the deployment script\n\nðŸ”§ To fix:\n- Get the correct Client ID: az ad app list --display-name "Azure Cosmos DB MCP Toolkit API" --query "[0].appId" -o tsv\n- Or check your deployment-info.json file for "ENTRA_APP_CLIENT_ID"\n\nOriginal error: ${error.message}`);
+                    showError(`Application not found in directory.\n\n This usually means:\n1. The Client ID is incorrect - verify it matches your deployment-info.json\n2. You may have entered the Tenant ID in the Client ID field\n3. The Entra App hasn't been created yet - run the deployment script\n\n To fix:\n- Get the correct Client ID: az ad app list --display-name "Azure Cosmos DB MCP Toolkit API" --query "[0].appId" -o tsv\n- Or check your deployment-info.json file for "ENTRA_APP_CLIENT_ID"\n\nOriginal error: ${error.message}`);
                 } else if (error.message && error.message.includes('wrong tenant')) {
-                    showError(`Wrong tenant error.\n\nâŒ You may have:\n1. Entered the wrong Tenant ID\n2. Swapped the Client ID and Tenant ID\n\nðŸ”§ To fix:\n- Get your Tenant ID: az account show --query "tenantId" -o tsv\n- Verify Client ID and Tenant ID are different values\n\nOriginal error: ${error.message}`);
+                    showError(`Wrong tenant error.\n\n You may have:\n1. Entered the wrong Tenant ID\n2. Swapped the Client ID and Tenant ID\n\n To fix:\n- Get your Tenant ID: az account show --query "tenantId" -o tsv\n- Verify Client ID and Tenant ID are different values\n\nOriginal error: ${error.message}`);
                 } else {
-                    showError(`Login failed: ${error.message}\n\nðŸ’¡ Common issues:\n- Client ID is incorrect\n- Tenant ID is incorrect\n- App registration doesn't exist\n- Pop-up was blocked by browser`);
+                    showError(`Login failed: ${error.message}\n\n Common issues:\n- Client ID is incorrect\n- Tenant ID is incorrect\n- App registration doesn't exist\n- Pop-up was blocked by browser`);
                 }
                 updateAuthUI(false);
             }
@@ -605,7 +605,7 @@
 
             if (isLocalMode()) {
                 authStatus.className = 'auth-status authenticated';
-                authStatus.textContent = 'âœ… Local mode enabled (authentication bypass)';
+                authStatus.textContent = ' Local mode enabled (authentication bypass)';
                 loginBtn.style.display = 'none';
                 logoutBtn.style.display = 'none';
                 getTokenBtn.style.display = 'none';
@@ -616,7 +616,7 @@
 
             if (isAuthenticated && currentAccount) {
                 authStatus.className = 'auth-status authenticated';
-                authStatus.textContent = 'âœ… Authenticated';
+                authStatus.textContent = ' Authenticated';
                 
                 loginBtn.style.display = 'none';
                 logoutBtn.style.display = 'inline-block';
@@ -647,7 +647,7 @@
                 
             } else {
                 authStatus.className = 'auth-status unauthenticated';
-                authStatus.textContent = 'âŒ Not authenticated';
+                authStatus.textContent = ' Not authenticated';
                 
                 loginBtn.style.display = 'inline-block';
                 logoutBtn.style.display = 'none';
@@ -844,7 +844,7 @@
                     if (response.status === 401) {
                         showError(`Authentication failed. Please check:\n1. You have the 'Mcp.Tool.Executor' role\n2. Your token is valid\n3. The Client ID is correct\n\nHTTP ${response.status}: ${responseText}`);
                     } else if (response.status === 500) {
-                        showError(`Server Error (HTTP 500).\n\nThe MCP server encountered an internal error. This could be due to:\n1. Missing environment variables (COSMOS_ENDPOINT)\n2. Cosmos DB connection issues\n3. Insufficient permissions on Cosmos DB\n4. Invalid authentication configuration\n\nServer response:\n${responseText}\n\nðŸ”§ Check the container app logs:\naz containerapp logs show --name <your-app-name> --resource-group <your-rg> --follow`);
+                        showError(`Server Error (HTTP 500).\n\nThe MCP server encountered an internal error. This could be due to:\n1. Missing environment variables (COSMOS_ENDPOINT)\n2. Cosmos DB connection issues\n3. Insufficient permissions on Cosmos DB\n4. Invalid authentication configuration\n\nServer response:\n${responseText}\n\n Check the container app logs:\naz containerapp logs show --name <your-app-name> --resource-group <your-rg> --follow`);
                     } else {
                         throw new Error(`HTTP ${response.status}: ${response.statusText}\n\nResponse: ${responseText}`);
                     }
@@ -866,9 +866,9 @@
                 
                 // Check if it's a real CORS error (blocked by browser)
                 if (error.name === 'TypeError' && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-                    showError(`${actionName} failed - unable to reach the server.\n\nError: ${error.message}\n\nðŸ”§ Possible causes:\n1. CORS is not configured on the Container App\n2. The server URL is incorrect\n3. The server is not running\n4. Network connectivity issues\n\nTo verify CORS configuration:\naz containerapp ingress cors show --name <your-app-name> --resource-group <your-rg>\n\nTo enable CORS:\naz containerapp ingress cors enable --name <your-app-name> --resource-group <your-rg> --allowed-origins "*"`);
+                    showError(`${actionName} failed - unable to reach the server.\n\nError: ${error.message}\n\n Possible causes:\n1. CORS is not configured on the Container App\n2. The server URL is incorrect\n3. The server is not running\n4. Network connectivity issues\n\nTo verify CORS configuration:\naz containerapp ingress cors show --name <your-app-name> --resource-group <your-rg>\n\nTo enable CORS:\naz containerapp ingress cors enable --name <your-app-name> --resource-group <your-rg> --allowed-origins "*"`);
                 } else if (error.message.includes('CORS')) {
-                    showError(`${actionName} failed due to CORS restrictions.\n\nError: ${error.message}\n\nðŸ”§ Solutions:\n1. Configure CORS in your Azure Container App\n2. Use the cURL commands shown below`);
+                    showError(`${actionName} failed due to CORS restrictions.\n\nError: ${error.message}\n\n Solutions:\n1. Configure CORS in your Azure Container App\n2. Use the cURL commands shown below`);
                 } else {
                     showError(`${actionName} failed: ${error.message}`);
                 }
@@ -1128,7 +1128,7 @@
                 // Show other errors in the output section
                 const output = document.getElementById('output');
                 output.className = 'output error';
-                output.textContent = 'âŒ Error: ' + message;
+                output.textContent = ' Error: ' + message;
             }
         }
 
@@ -1136,14 +1136,14 @@
         function showLoading(message) {
             const output = document.getElementById('output');
             output.className = 'output';
-            output.textContent = 'â³ ' + message;
+            output.textContent = ' ' + message;
         }
 
         // Show success message
         function showSuccess(message) {
             const output = document.getElementById('output');
             output.className = 'output success';
-            output.textContent = 'âœ… ' + message;
+            output.textContent = ' ' + message;
         }
 
         // Show response (general output)
@@ -1199,3 +1199,4 @@
     </script>
 </body>
 </html>
+

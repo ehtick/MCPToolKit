@@ -1500,33 +1500,43 @@ function Update-Frontend-Config {
 
 # Main function (following PostgreSQL pattern)
 function Validate-AzureAiServicesEndpoint {
-    # Validate that OPENAI_ENDPOINT uses Azure AI Services (Cognitive Services) endpoint format,
-    # not Microsoft Foundry project endpoint format
+    # Validate OPENAI_ENDPOINT format. The application supports three types:
+    # 1. Azure AI Services (Cognitive Services): https://<resource>.cognitiveservices.azure.com/
+    # 2. OpenAI Native API: https://api.openai.com/v1
+    # 3. Azure AI Foundry: https://<resource>.services.ai.azure.com/api/projects/<project-name>
     if (-not $script:OPENAI_ENDPOINT) {
         return  # No endpoint configured yet is OK
     }
     
+    # If endpoint is .services.ai.azure.com, it MUST be a valid Foundry project endpoint with /api/projects/
     if ($script:OPENAI_ENDPOINT -match "\.services\.ai\.azure\.com") {
-        Write-Error @"
-ERROR: Microsoft Foundry project endpoint detected
+        if ($script:OPENAI_ENDPOINT -notmatch "/api/projects/") {
+            Write-Error @"
+ERROR: Invalid Azure AI Foundry endpoint format
 
-The OPENAI_ENDPOINT is set to a Microsoft Foundry project URL, but the application
-requires an Azure AI Services (Cognitive Services) account endpoint instead.
+The OPENAI_ENDPOINT contains '.services.ai.azure.com' but is not a valid Azure AI Foundry project endpoint.
 
-CORRECT FORMAT:
-  https://<resource-name>.cognitiveservices.azure.com/
+CORRECT FORMAT (Azure AI Foundry):
+  https://<resource>.services.ai.azure.com/api/projects/<project-name>
 
-WRONG FORMAT (Project URL):
-  https://<project-name>.services.ai.azure.com/api/projects/...
+INCORRECT FORMATS:
+  https://<resource>.services.ai.azure.com/
+  https://<resource>.services.ai.azure.com/api/projects/
 
 TO FIX:
-  1. Go to Azure Portal > Cognitive Services / AI Services resource
-  2. Copy the endpoint URL from the resource's Overview page
-  3. Update OPENAI_ENDPOINT to use the Cognitive Services endpoint
+  1. Go to Azure Portal > AI Foundry project
+  2. Copy the full project endpoint URL (must include /api/projects/<project-name>)
+  3. Update OPENAI_ENDPOINT to the complete Foundry project endpoint
 
-For more information, see: https://aka.ms/cognitive-services-endpoints
+ALTERNATIVE (Azure AI Services / Cognitive Services):
+  https://<resource>.cognitiveservices.azure.com/
+
+For more information, see: https://aka.ms/foundry-endpoints
 "@
-        exit 1
+            exit 1
+        }
+        # Valid Foundry endpoint, proceed
+        Write-Info "Validated Azure AI Foundry endpoint: $script:OPENAI_ENDPOINT"
     }
 }
 
