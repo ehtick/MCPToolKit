@@ -123,13 +123,6 @@
       "metadata": {
         "description": "Azure OpenAI embedding deployment name"
       }
-    },
-    "embeddingDimensions": {
-      "type": "int",
-      "defaultValue": 0,
-      "metadata": {
-        "description": "Embedding dimensions (optional). For text-embedding-3-large/small models"
-      }
     }
   },
   "variables": {
@@ -231,10 +224,6 @@
                 {
                   "name": "OPENAI_EMBEDDING_DEPLOYMENT",
                   "value": "[parameters('embeddingDeploymentName')]"
-                },
-                {
-                  "name": "OPENAI_EMBEDDING_DIMENSIONS",
-                  "value": "[string(parameters('embeddingDimensions'))]"
                 }
               ],
               "probes": [

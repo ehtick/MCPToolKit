@@ -50,8 +50,7 @@ az deployment group create \
   --parameters \
     "cosmosEndpoint=https://yourcosmosdb.documents.azure.com:443/" \
     "azureAiServiceEndpoint=https://my-ai-service.cognitiveservices.azure.com/" \
-    "embeddingDeploymentName=text-embedding-ada-002" \
-    "embeddingDimensions=1536"  # Optional: defaults to 1536 if not specified
+    "embeddingDeploymentName=text-embedding-ada-002"
 
 # Optional: use an existing ACR in another resource group
 az deployment group create \
