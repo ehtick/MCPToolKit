@@ -7,7 +7,7 @@ param location string = resourceGroup().location
 @description('Cosmos DB endpoint (external resource)')
 param cosmosEndpoint string
 
-@description('Azure AI Services (Cognitive Services) account endpoint URL. Example: https://my-ai-service.cognitiveservices.azure.com/ — Get this from your Cognitive Services resource Overview page in Azure Portal, NOT a Microsoft Foundry project URL.')
+@description('Embedding service endpoint URL. Supports Azure AI Services (Cognitive Services), Azure AI Foundry, or OpenAI.\nExamples:\n- Azure AI Services: https://my-ai-service.cognitiveservices.azure.com/\n- Azure AI Foundry: https://my-foundry.services.ai.azure.com/api/projects/my-project\n- OpenAI: https://api.openai.com/v1')
 param azureAiServiceEndpoint string
 
 @description('Embedding model deployment name in AI Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002')

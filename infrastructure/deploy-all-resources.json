@@ -32,7 +32,7 @@
     "azureAiServiceEndpoint": {
       "type": "string",
       "metadata": {
-        "description": "Azure AI Services (Cognitive Services) account endpoint. Example: https://my-ai-service.cognitiveservices.azure.com/ — Get this from your Cognitive Services resource Overview page in Azure Portal. Do NOT use a Microsoft Foundry project endpoint."
+        "description": "Embedding service endpoint URL. Supports Azure AI Services (Cognitive Services), Azure AI Foundry, or OpenAI.\nExamples:\n- Azure AI Services: https://my-ai-service.cognitiveservices.azure.com/\n- Azure AI Foundry: https://my-foundry.services.ai.azure.com/api/projects/my-project\n- OpenAI: https://api.openai.com/v1"
       }
     },
     "embeddingDeploymentName": {

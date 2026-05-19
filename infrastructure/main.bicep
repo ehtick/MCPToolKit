@@ -43,7 +43,7 @@ param commonTags object = {
 @description('Azure Cosmos DB endpoint URL')
 param cosmosEndpoint string = ''
 
-@description('Azure AI Services (Cognitive Services) account endpoint URL. Example: https://<resource-name>.cognitiveservices.azure.com/')
+@description('Embedding service endpoint URL. Supports Azure AI Services (Cognitive Services), Azure AI Foundry, or OpenAI.\nExamples:\n- Azure AI Services: https://my-ai-service.cognitiveservices.azure.com/\n- Azure AI Foundry: https://my-foundry.services.ai.azure.com/api/projects/my-project\n- OpenAI: https://api.openai.com/v1')
 param azureAiServiceEndpoint string = ''
 
 @description('Azure OpenAI embedding deployment name')
