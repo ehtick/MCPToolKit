@@ -43,7 +43,7 @@ param commonTags object = {
 @description('Azure Cosmos DB endpoint URL')
 param cosmosEndpoint string = ''
 
-@description('Embedding service endpoint URL for vector search and embedding generation.\n\nSupported providers:\n- Azure AI Services (Cognitive Services)\n- Azure AI Foundry\n- OpenAI (native API)\n\nHow to use:\n- Enter the endpoint URL for your chosen provider.\n- The application will auto-detect the provider type based on the URL.\n- Authentication: Use an API key for OpenAI or Azure AI Services, or Managed Identity for Azure resources.\n\nExamples:\n- Azure AI Services: https://my-ai-service.cognitiveservices.azure.com/\n- Azure AI Foundry: https://my-foundry.services.ai.azure.com/api/projects/my-project\n- OpenAI: https://api.openai.com/v1\n\nSee documentation for details on configuring authentication and deployment names.')
+@description('Embedding service endpoint URL (auto-detected provider). Supported: Azure AI Services (https://<resource>.cognitiveservices.azure.com/), Azure AI Foundry (https://<resource>.services.ai.azure.com/api/projects/<project>), or OpenAI (https://api.openai.com/v1).')
 param azureAiServiceEndpoint string = ''
 
 @description('Azure OpenAI embedding deployment name')
