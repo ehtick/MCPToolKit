@@ -43,8 +43,8 @@ param commonTags object = {
 @description('Azure Cosmos DB endpoint URL')
 param cosmosEndpoint string = ''
 
-@description('Azure OpenAI endpoint URL')
-param openAIEndpoint string = ''
+@description('Azure AI Services (Cognitive Services) account endpoint URL. Example: https://<resource-name>.cognitiveservices.azure.com/')
+param azureAiServiceEndpoint string = ''
 
 @description('Azure OpenAI embedding deployment name')
 param embeddingDeploymentName string = ''
@@ -150,7 +150,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'OPENAI_ENDPOINT'
-              value: openAIEndpoint
+              value: azureAiServiceEndpoint
             }
             {
               name: 'OPENAI_EMBEDDING_DEPLOYMENT'

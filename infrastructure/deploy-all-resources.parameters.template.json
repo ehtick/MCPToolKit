@@ -14,10 +14,10 @@
         "description": "Your Cosmos DB endpoint. Example: https://your-cosmos-account.documents.azure.com:443/"
       }
     },
-    "aifProjectEndpoint": {
+    "azureAiServiceEndpoint": {
       "value": "",
       "metadata": {
-        "description": "Microsoft Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Examples: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/"
+        "description": "Azure AI Services (Cognitive Services) account endpoint. Example: https://my-ai-service.cognitiveservices.azure.com/ — Get this from your Cognitive Services resource Overview page in Azure Portal. Do NOT use a Microsoft Foundry project endpoint."
       }
     },
     "embeddingDeploymentName": {

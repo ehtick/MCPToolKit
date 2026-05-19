@@ -15,9 +15,15 @@ The infrastructure templates create only the necessary resources for running the
 
 You must already have:
 - **Azure Cosmos DB** account with your data
-- **Microsoft Foundry project** with an embedding model deployment (e.g., text-embedding-ada-002 or text-embedding-3-small)
+- **Azure AI Services (Cognitive Services)** account with an embedding model deployment (e.g., text-embedding-ada-002 or text-embedding-3-small)
 
-> **Note**: The Microsoft Foundry project endpoint follows the format: `https://<your-project-name>.<region>.api.azureml.ms/` or the inference endpoint from your Microsoft Foundry project settings. You can find this in the Microsoft Foundry portal under your project's Settings → Endpoints.
+> **Important**: Use the Azure AI Services **account endpoint** from the Cognitive Services resource, not a Microsoft Foundry project endpoint. 
+> 
+> ✅ **CORRECT format**: `https://<resource-name>.cognitiveservices.azure.com/`
+> 
+> ❌ **WRONG format** (Foundry project): `https://<project-name>.services.ai.azure.com/api/projects/...`
+> 
+> To get your endpoint: Go to Azure Portal → Cognitive Services resource → Overview page → copy the "Endpoint" URL
 
 ## Deployment Options
 
@@ -43,7 +49,7 @@ az deployment group create \
   --template-file "deploy-all-resources.bicep" \
   --parameters \
     "cosmosEndpoint=https://yourcosmosdb.documents.azure.com:443/" \
-    "aifProjectEndpoint=https://your-aif-project.openai.azure.com/" \
+    "azureAiServiceEndpoint=https://my-ai-service.cognitiveservices.azure.com/" \
     "embeddingDeploymentName=text-embedding-ada-002" \
     "embeddingDimensions=1536"  # Optional: defaults to 1536 if not specified
 
@@ -53,7 +59,7 @@ az deployment group create \
   --template-file "deploy-all-resources.bicep" \
   --parameters \
     "cosmosEndpoint=https://yourcosmosdb.documents.azure.com:443/" \
-    "aifProjectEndpoint=https://your-aif-project.openai.azure.com/" \
+    "azureAiServiceEndpoint=https://my-ai-service.cognitiveservices.azure.com/" \
     "embeddingDeploymentName=text-embedding-ada-002" \
     "useExistingAcr=true" \
     "existingAcrName=mysharedacr" \

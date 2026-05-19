@@ -25,20 +25,20 @@ public static class EmbeddingClientFactory
         {
             throw new InvalidOperationException(
                 "OPENAI_ENDPOINT environment variable must be set. " +
-                "Set it to your Azure AI Services account endpoint, e.g. https://<resource>.cognitiveservices.azure.com/");
+                "Set it to your Azure AI Services (Cognitive Services) account endpoint, e.g. https://<resource>.cognitiveservices.azure.com/");
         }
 
         // Reject Foundry project-style URLs — they are not supported by AzureOpenAIClient.
-        // Valid account endpoint shape: https://<resource>.cognitiveservices.azure.com/
-        // Invalid project URL shape:   https://<resource>.services.ai.azure.com/api/projects/<name>
+        // Valid account endpoint: https://<resource>.cognitiveservices.azure.com/
+        // Invalid project URL:   https://<resource>.services.ai.azure.com/api/projects/<name>
         if (endpoint.Contains("/api/projects/", StringComparison.OrdinalIgnoreCase) ||
             endpoint.Contains(".services.ai.azure.com", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
                 $"OPENAI_ENDPOINT appears to be a Microsoft Foundry project URL ('{endpoint}'). " +
-                "This is not supported. Use the Azure AI Services account endpoint instead, " +
-                "e.g. https://<resource>.cognitiveservices.azure.com/ — " +
-                "find it in the Azure portal under your Cognitive Services / AI Services resource overview.");
+                "This is not supported. Use the Azure AI Services (Cognitive Services) account endpoint instead, " +
+                "e.g. https://<resource>.cognitiveservices.azure.com/ " +
+                "— find it in the Azure portal under your Cognitive Services resource > Overview.");
         }
 
         // Check for API key first (local development or scenarios where key is available)

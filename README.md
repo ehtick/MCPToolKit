@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 
 - Azure subscription ([Free account](https://azure.microsoft.com/free/))
 - **Azure Cosmos DB account** ([Create account](https://learn.microsoft.com/azure/cosmos-db/nosql/quickstart-portal))
-- **Azure OpenAI or Microsoft Foundry project** ([Create Azure OpenAI](https://learn.microsoft.com/azure/ai-services/openai/how-to/create-resource) or [Create Microsoft Foundry project](https://learn.microsoft.com/azure/ai-studio/how-to/create-projects)) (required for vector search with embeddings)
+- **Azure AI Services (Cognitive Services)** with an embedding model deployment ([Create Azure AI Service](https://learn.microsoft.com/azure/ai-services/what-are-ai-services)) (required for vector search with embeddings; includes OpenAI APIs)
 - Azure CLI ([Install](https://docs.microsoft.com/cli/azure/install-azure-cli)) installed and authenticated
 - PowerShell 7+ ([Install](https://docs.microsoft.com/powershell/scripting/install/installing-powershell)) (for deployment scripts)
 - **Docker Desktop** ([Install](https://www.docker.com/products/docker-desktop/)) installed and running
@@ -20,7 +20,7 @@ This toolkit provides:
 
 - **Secure MCP Server**: JWT-authenticated endpoint for AI agents
 - **Azure Cosmos DB Integration**: Full CRUD operations, vector search, and schema discovery
-- **Microsoft Foundry Ready**: Optional one-step integration with Microsoft Foundry projects
+- **Azure AI Services Integration**: Automatic embeddings and vector search support
 - **Enterprise Security**: Azure Entra ID, Managed Identity, RBAC
 - **Production Ready**: Container Apps hosting with auto-scaling
 - **Local Development**: Docker Compose and .NET dev options

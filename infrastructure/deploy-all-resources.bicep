@@ -7,8 +7,8 @@ param location string = resourceGroup().location
 @description('Cosmos DB endpoint (external resource)')
 param cosmosEndpoint string
 
-@description('AI Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Example: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/')
-param aifProjectEndpoint string
+@description('Azure AI Services (Cognitive Services) account endpoint URL. Example: https://my-ai-service.cognitiveservices.azure.com/ — Get this from your Cognitive Services resource Overview page in Azure Portal, NOT a Microsoft Foundry project URL.')
+param azureAiServiceEndpoint string
 
 @description('Embedding model deployment name in AI Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002')
 param embeddingDeploymentName string
@@ -129,7 +129,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             // The Azure.AI.OpenAI SDK works seamlessly with both Microsoft Foundry and legacy endpoints
             {
               name: 'OPENAI_ENDPOINT'
-              value: aifProjectEndpoint
+              value: azureAiServiceEndpoint
             }
             {
               name: 'OPENAI_EMBEDDING_DEPLOYMENT'
