@@ -107,15 +107,28 @@ The MCP server uses these environment variables for both local development and p
 
 ### Embeddings/OpenAI Configuration
 
-**For Local Development (with API Key):**
-- `OPENAI_API_KEY` - OpenAI or local Foundry API key
-  - Use this for local Foundry instances or when using OpenAI API key directly
-  - Example: `sk-...` (OpenAI) or `local-key-...` (local Foundry)
+The toolkit supports three types of embedding endpoints with automatic detection:
 
-**For Cloud Production:**
-- `OPENAI_ENDPOINT` - Azure OpenAI or local Foundry endpoint
-- Uses DefaultAzureCredential if `OPENAI_API_KEY` is not set
-- Falls back to Azure credentials for cloud authentication
+**Azure AI Services (Cognitive Services):**
+- `OPENAI_ENDPOINT` - https://<resource>.cognitiveservices.azure.com/
+- Uses DefaultAzureCredential or `OPENAI_API_KEY` if set
+- Example: `https://my-ai-service.cognitiveservices.azure.com/`
+
+**Azure AI Foundry:**
+- `OPENAI_ENDPOINT` - https://<resource>.services.ai.azure.com/api/projects/<project-name>
+- Uses DefaultAzureCredential or `OPENAI_API_KEY` if set
+- Example: `https://my-project.services.ai.azure.com/api/projects/my-project-123`
+
+**OpenAI Native API:**
+- `OPENAI_ENDPOINT` - https://api.openai.com/v1
+- **Requires:** `OPENAI_API_KEY` (mandatory for OpenAI)
+- Example: `https://api.openai.com/v1`
+
+**Common Configuration:**
+- `OPENAI_API_KEY` - API key for authentication (optional for Azure endpoints, required for OpenAI)
+  - Example: `sk-...` (OpenAI) or Azure API key
+- `OPENAI_EMBEDDING_DEPLOYMENT` - Model/deployment name
+  - Examples: `text-embedding-3-small`, `text-embedding-3-large`, `gpt-4o-mini`
 
 ### Other Configuration
 
@@ -133,10 +146,22 @@ The MCP server uses these environment variables for both local development and p
 # Cosmos DB Emulator (local)
 $env:COSMOS_CONNECTION_STRING = "AccountEndpoint=https://localhost:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"
 
-# OpenAI (local Foundry or with API key)
-$env:OPENAI_ENDPOINT = "http://localhost:8000"
-$env:OPENAI_API_KEY = "your-local-key-or-openai-key"
+# Choose ONE of the following embedding providers:
+
+# Option 1: OpenAI Native API
+$env:OPENAI_ENDPOINT = "https://api.openai.com/v1"
+$env:OPENAI_API_KEY = "sk-your-openai-key"
 $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
+
+# Option 2: Azure AI Services (with API key)
+# $env:OPENAI_ENDPOINT = "https://my-ai-service.cognitiveservices.azure.com/"
+# $env:OPENAI_API_KEY = "your-azure-key"
+# $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
+
+# Option 3: Local/Azure AI Foundry with API key
+# $env:OPENAI_ENDPOINT = "http://localhost:8000"  # or Azure Foundry URL
+# $env:OPENAI_API_KEY = "your-api-key"
+# $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
 
 # Development
 $env:DEV_BYPASS_AUTH = "true"
@@ -149,10 +174,22 @@ $env:DEV_BYPASS_AUTH = "true"
 $env:COSMOS_ENDPOINT = "https://myaccount.documents.azure.com:443/"
 # Azure credentials via DefaultAzureCredential (az login)
 
-# Azure OpenAI (cloud)
-$env:OPENAI_ENDPOINT = "https://my-openai.openai.azure.com"
+# Choose ONE of the following embedding providers:
+
+# Option 1: Azure AI Services (cloud) with Managed Identity
+$env:OPENAI_ENDPOINT = "https://my-openai.cognitiveservices.azure.com/"
 $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
-# Azure credentials via DefaultAzureCredential (az login)
+# Uses DefaultAzureCredential (Managed Identity)
+
+# Option 2: Azure AI Foundry (cloud) with Managed Identity
+# $env:OPENAI_ENDPOINT = "https://my-project.services.ai.azure.com/api/projects/my-project-123"
+# $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
+# Uses DefaultAzureCredential (Managed Identity)
+
+# Option 3: OpenAI Native API
+# $env:OPENAI_ENDPOINT = "https://api.openai.com/v1"
+# $env:OPENAI_API_KEY = "sk-your-openai-key"
+# $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
 ```
 
 ## Using Cosmos DB Emulator

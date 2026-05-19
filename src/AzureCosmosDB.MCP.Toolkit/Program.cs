@@ -241,6 +241,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 
+// Store configuration in static state for access by static tool methods
+AppState.Configuration = builder.Configuration;
+
 // Add security headers middleware to allow MSAL authentication
 app.Use(async (context, next) =>
 {
@@ -337,6 +340,12 @@ else
 app.MapGet("/", () => Results.Redirect("/index.html"));
 
 app.Run();
+
+// Static configuration holder for access in static tool methods
+internal static class AppState
+{
+    public static IConfiguration? Configuration { get; set; }
+}
 
 public partial class Program
 {
@@ -861,14 +870,18 @@ public static class CosmosDbTools
 
             var credential = new DefaultAzureCredential();
 
-            // Generate embedding using Azure OpenAI
+            // Generate embedding using the appropriate embedding service
+            // (Azure AI Services, OpenAI native, or Azure AI Foundry)
             float[] embedding;
             try
             {
-                var openaiClient = new AzureOpenAIClient(new Uri(openaiEndpoint), credential);
-                var embeddingClient = openaiClient.GetEmbeddingClient(embeddingDeployment);
-                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(searchText);
-                embedding = embeddingResponse.Value.ToFloats().ToArray();
+                if (AppState.Configuration == null)
+                {
+                    return JsonSerializer.Serialize(new { error = "Application configuration not initialized." });
+                }
+                
+                var embeddingClient = EmbeddingClientFactory.CreateEmbeddingClient(AppState.Configuration);
+                embedding = await embeddingClient.GenerateEmbeddingAsync(searchText, embeddingDeployment);
             }
             catch (Exception ex)
             {

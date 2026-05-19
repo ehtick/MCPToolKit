@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Multi-provider embedding support**: Vector search now supports Azure AI Services (Cognitive Services), Azure AI Foundry projects, and OpenAI native API.
+- **Automatic endpoint detection**: System automatically identifies the embedding endpoint type based on URL pattern.
+- New `IEmbeddingClient` abstraction layer with provider-specific implementations.
+
+### Changed
+- Enhanced `OPENAI_ENDPOINT` configuration to accept multiple endpoint formats (Azure AI Services, Azure AI Foundry, OpenAI native).
+- Updated documentation and environment examples to reflect multi-provider support.
+
 ## [1.1.0-rc.1] - 2026-05-18
 
 ### Added

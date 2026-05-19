@@ -6,7 +6,10 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 
 - Azure subscription ([Free account](https://azure.microsoft.com/free/))
 - **Azure Cosmos DB account** ([Create account](https://learn.microsoft.com/azure/cosmos-db/nosql/quickstart-portal))
-- **Azure AI Services (Cognitive Services)** with an embedding model deployment ([Create Azure AI Service](https://learn.microsoft.com/azure/ai-services/what-are-ai-services)) (required for vector search with embeddings; includes OpenAI APIs)
+- **Embedding Service** (one of the following for vector search):
+  - **Azure AI Services (Cognitive Services)** with embedding model ([Create](https://learn.microsoft.com/azure/ai-services/what-are-ai-services))
+  - **Azure AI Foundry** with embedding model ([Create](https://learn.microsoft.com/azure/ai/foundry/how-to/create-projects))
+  - **OpenAI API** with API key ([Get API key](https://platform.openai.com/api-keys))
 - Azure CLI ([Install](https://docs.microsoft.com/cli/azure/install-azure-cli)) installed and authenticated
 - PowerShell 7+ ([Install](https://docs.microsoft.com/powershell/scripting/install/installing-powershell)) (for deployment scripts)
 - **Docker Desktop** ([Install](https://www.docker.com/products/docker-desktop/)) installed and running

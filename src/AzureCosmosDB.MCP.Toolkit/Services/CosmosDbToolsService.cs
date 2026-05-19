@@ -321,7 +321,8 @@ public class CosmosDbToolsService
 
             _logger.LogInformation("Vector search for '{SearchText}' in {DatabaseId}/{ContainerId}", searchText, databaseId, containerId);
 
-            // Generate embedding using Azure OpenAI
+            // Generate embedding using the appropriate embedding service
+            // (Azure AI Services, OpenAI native, or Azure AI Foundry)
             float[] embedding;
             try
             {
@@ -332,7 +333,7 @@ public class CosmosDbToolsService
                 var authMode = string.IsNullOrWhiteSpace(configuredApiKey) ? "azure-credential" : "api-key";
                 _logger.LogInformation("Embedding authentication mode: {AuthMode}", authMode);
                 
-                var openaiClient = EmbeddingClientFactory.CreateEmbeddingClient(_configuration, _logger);
+                var embeddingClient = EmbeddingClientFactory.CreateEmbeddingClient(_configuration, _logger);
                 
                 var embeddingDeployment = _configuration["OPENAI_EMBEDDING_DEPLOYMENT"] 
                     ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
@@ -351,18 +352,11 @@ public class CosmosDbToolsService
                     embeddingDimensions = parsedDimensions;
                 }
                 
-                _logger.LogInformation("Getting embedding client for deployment: {Deployment}", embeddingDeployment);
-                var embeddingClient = openaiClient.GetEmbeddingClient(embeddingDeployment);
-                
-                _logger.LogInformation("Generating embedding for text: {Text}{DimensionsInfo}", 
-                    searchText, 
+                _logger.LogInformation("Generating embedding for deployment: {Deployment}{DimensionsInfo}", 
+                    embeddingDeployment,
                     embeddingDimensions.HasValue ? $" with {embeddingDimensions.Value} dimensions" : "");
                 
-                var embeddingResponse = embeddingDimensions.HasValue
-                    ? await embeddingClient.GenerateEmbeddingAsync(searchText, new OpenAI.Embeddings.EmbeddingGenerationOptions { Dimensions = embeddingDimensions.Value }, cancellationToken)
-                    : await embeddingClient.GenerateEmbeddingAsync(searchText, cancellationToken: cancellationToken);
-                
-                embedding = embeddingResponse.Value.ToFloats().ToArray();
+                embedding = await embeddingClient.GenerateEmbeddingAsync(searchText, embeddingDeployment, cancellationToken);
                 _logger.LogInformation("Generated embedding with {Dimensions} dimensions", embedding.Length);
             }
             catch (RequestFailedException ex) when (ex.Status == 401 || ex.Status == 403)
