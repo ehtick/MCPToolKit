@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-05-20
+
+### Changed
+- Updated release workflow trigger so all `v*` tag pushes reliably create GitHub Releases.
+- Added `CONTRIBUTING.md` and linked contribution guidance from the README.
+
+### Fixed
+- Added bug-fix issue tracking entries for the latest fixes (excluding issue #89).
+
 ## [1.1.0] - 2026-05-20
 
 ### Added
