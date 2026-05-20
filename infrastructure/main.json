@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.38.33.27573",
-      "templateHash": "18069607232906123109"
+      "version": "0.43.8.12551",
+      "templateHash": "8407296595980958440"
     }
   },
   "parameters": {
@@ -35,6 +35,27 @@
       "defaultValue": "[format('mcpdemo{0}', uniqueString(resourceGroup().id))]",
       "metadata": {
         "description": "Container registry name"
+      }
+    },
+    "useExistingAcr": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Use an existing Azure Container Registry instead of creating one in this resource group"
+      }
+    },
+    "existingAcrName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Existing ACR name (required when useExistingAcr=true)"
+      }
+    },
+    "existingAcrResourceGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource group that contains the existing ACR (optional, defaults to current resource group)"
       }
     },
     "containerImage": {
@@ -104,8 +125,12 @@
       }
     }
   },
+  "variables": {
+    "resolvedAcrResourceGroup": "[if(empty(parameters('existingAcrResourceGroup')), resourceGroup().name, parameters('existingAcrResourceGroup'))]"
+  },
   "resources": [
     {
+      "condition": "[not(parameters('useExistingAcr'))]",
       "type": "Microsoft.ContainerRegistry/registries",
       "apiVersion": "2023-07-01",
       "name": "[parameters('containerRegistryName')]",
@@ -154,15 +179,15 @@
           },
           "registries": [
             {
-              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer]",
-              "username": "[parameters('containerRegistryName')]",
+              "server": "[if(parameters('useExistingAcr'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('resolvedAcrResourceGroup')), 'Microsoft.ContainerRegistry/registries', parameters('existingAcrName')), '2023-07-01').loginServer, reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer)]",
+              "username": "[if(parameters('useExistingAcr'), parameters('existingAcrName'), parameters('containerRegistryName'))]",
               "passwordSecretRef": "registry-password"
             }
           ],
           "secrets": [
             {
               "name": "registry-password",
-              "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').passwords[0].value]"
+              "value": "[if(parameters('useExistingAcr'), listCredentials(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('resolvedAcrResourceGroup')), 'Microsoft.ContainerRegistry/registries', parameters('existingAcrName')), '2023-07-01').passwords[0].value, listCredentials(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').passwords[0].value)]"
             }
           ]
         },
@@ -273,11 +298,11 @@
     },
     "CONTAINER_REGISTRY_LOGIN_SERVER": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer]"
+      "value": "[if(parameters('useExistingAcr'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('resolvedAcrResourceGroup')), 'Microsoft.ContainerRegistry/registries', parameters('existingAcrName')), '2023-07-01').loginServer, reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer)]"
     },
     "CONTAINER_REGISTRY_NAME": {
       "type": "string",
-      "value": "[parameters('containerRegistryName')]"
+      "value": "[if(parameters('useExistingAcr'), parameters('existingAcrName'), parameters('containerRegistryName'))]"
     },
     "CONTAINER_APP_NAME": {
       "type": "string",

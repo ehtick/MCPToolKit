@@ -16,6 +16,12 @@
     Azure region for deployment (default: eastus)
 .PARAMETER CosmosAccountName
     Name of the Cosmos DB account (default: cosmosmcpkit)
+.PARAMETER CosmosResourceGroup
+    Resource group containing the Cosmos DB account (default: same as ResourceGroup)
+.PARAMETER AcrResourceGroup
+    Resource group containing Azure Container Registry (default: same as ResourceGroup)
+.PARAMETER AcrName
+    Existing Azure Container Registry name to use (optional)
 .PARAMETER ContainerAppName
     Name of the container app (default: mcp-toolkit-app)
 .PARAMETER EntraAppName
@@ -27,6 +33,8 @@
     ./Deploy-Cosmos-MCP-Server.ps1 -ResourceGroup "my-project" -Location "westus2" -CosmosAccountName "mycosmosdb"
 .EXAMPLE
     ./Deploy-Cosmos-MCP-Server.ps1 -ResourceGroup "my-rg" -EntraAppName "My Custom MCP App"
+.EXAMPLE
+    ./Deploy-Cosmos-MCP-Server.ps1 -ResourceGroup "aca-rg" -CosmosResourceGroup "cosmos-rg" -AcrResourceGroup "acr-rg" -AcrName "mysharedacr"
 #>
 
 param(
@@ -38,6 +46,15 @@ param(
     
     [Parameter(Mandatory=$false)]
     [string]$CosmosAccountName = "",
+
+    [Parameter(Mandatory=$false)]
+    [string]$CosmosResourceGroup = "",
+
+    [Parameter(Mandatory=$false)]
+    [string]$AcrResourceGroup = "",
+
+    [Parameter(Mandatory=$false)]
+    [string]$AcrName = "",
     
     [Parameter(Mandatory=$false)]
     [string]$ContainerAppName = "",
@@ -73,12 +90,12 @@ function Auto-Detect-Resources {
     
     # Auto-detect Cosmos DB account
     if ([string]::IsNullOrEmpty($script:CosmosAccountName)) {
-        $cosmosAccounts = az cosmosdb list --resource-group $ResourceGroup --query "[].name" -o tsv
+        $cosmosAccounts = az cosmosdb list --resource-group $script:COSMOS_RESOURCE_GROUP --query "[].name" -o tsv
         if ($cosmosAccounts) {
             $script:CosmosAccountName = ($cosmosAccounts -split "`n")[0].Trim()
             Write-Info "Auto-detected Cosmos DB account: $script:CosmosAccountName"
         } else {
-            Write-Error "No Cosmos DB account found in resource group $ResourceGroup"
+            Write-Error "No Cosmos DB account found in resource group $($script:COSMOS_RESOURCE_GROUP)"
             exit 1
         }
     }
@@ -94,6 +111,19 @@ function Auto-Detect-Resources {
             exit 1
         }
     }
+
+    # Auto-detect ACR only when using an external/different resource group and AcrName is not provided
+    if ([string]::IsNullOrEmpty($script:ACR_NAME) -and $script:USE_EXISTING_ACR) {
+        $registries = az acr list --resource-group $script:ACR_RESOURCE_GROUP --query "[].name" -o tsv
+        if ($registries) {
+            $script:ACR_NAME = ($registries -split "`n")[0].Trim()
+            Write-Info "Auto-detected ACR: $($script:ACR_NAME)"
+        }
+        else {
+            Write-Error "No ACR registry found in resource group $($script:ACR_RESOURCE_GROUP). Provide -AcrName explicitly."
+            exit 1
+        }
+    }
 }
 
 function Show-Usage {
@@ -103,6 +133,9 @@ function Show-Usage {
     Write-Host "  -ResourceGroup           Azure Resource Group name for deployment"
     Write-Host "  -Location               Azure region for deployment (optional, defaults to eastus)"
     Write-Host "  -CosmosAccountName      Name of the Cosmos DB account (optional, defaults to cosmosmcpkit)"
+    Write-Host "  -CosmosResourceGroup    Resource group for Cosmos DB account (optional, defaults to ResourceGroup)"
+    Write-Host "  -AcrResourceGroup       Resource group for ACR (optional, defaults to ResourceGroup)"
+    Write-Host "  -AcrName                Existing ACR name to use (optional)"
     Write-Host "  -ContainerAppName       Name of the container app (optional, defaults to mcp-toolkit-app)"
     Write-Host ""
     exit 1
@@ -114,10 +147,20 @@ function Parse-Arguments {
     $script:LOCATION = $Location
     $script:CosmosAccountName = $CosmosAccountName
     $script:ContainerAppName = $ContainerAppName
+    $script:COSMOS_RESOURCE_GROUP = if ([string]::IsNullOrWhiteSpace($CosmosResourceGroup)) { $ResourceGroup } else { $CosmosResourceGroup }
+    $script:ACR_RESOURCE_GROUP = if ([string]::IsNullOrWhiteSpace($AcrResourceGroup)) { $ResourceGroup } else { $AcrResourceGroup }
+    $script:ACR_NAME = $AcrName
+    $script:USE_EXISTING_ACR = ($script:ACR_RESOURCE_GROUP -ne $ResourceGroup) -or (-not [string]::IsNullOrWhiteSpace($script:ACR_NAME))
     
     Write-Info "Using Azure Resource Group: $ResourceGroup"
     Write-Info "Using Location: $Location"
     Write-Info "Using Cosmos Account Name: $CosmosAccountName"
+    Write-Info "Using Cosmos Resource Group: $($script:COSMOS_RESOURCE_GROUP)"
+    Write-Info "Using ACR Resource Group: $($script:ACR_RESOURCE_GROUP)"
+    Write-Info "Using Existing ACR: $($script:USE_EXISTING_ACR)"
+    if (-not [string]::IsNullOrWhiteSpace($script:ACR_NAME)) {
+        Write-Info "Using ACR Name: $($script:ACR_NAME)"
+    }
     Write-Info "Using Container App Name: $ContainerAppName"
 }
 
@@ -729,6 +772,24 @@ function Verify-Resource-Group {
     }
     
     Write-Info "Resource group verified successfully"
+
+    if ($script:COSMOS_RESOURCE_GROUP -ne $ResourceGroup) {
+        Write-Info "Verifying Cosmos resource group exists: $($script:COSMOS_RESOURCE_GROUP)"
+        $cosmosRgExists = az group exists --name $script:COSMOS_RESOURCE_GROUP
+        if ($cosmosRgExists -eq "false") {
+            Write-Error "Cosmos resource group '$($script:COSMOS_RESOURCE_GROUP)' does not exist."
+            exit 1
+        }
+    }
+
+    if ($script:ACR_RESOURCE_GROUP -ne $ResourceGroup) {
+        Write-Info "Verifying ACR resource group exists: $($script:ACR_RESOURCE_GROUP)"
+        $acrRgExists = az group exists --name $script:ACR_RESOURCE_GROUP
+        if ($acrRgExists -eq "false") {
+            Write-Error "ACR resource group '$($script:ACR_RESOURCE_GROUP)' does not exist."
+            exit 1
+        }
+    }
 }
 
 function Deploy-Infrastructure {
@@ -750,7 +811,12 @@ function Deploy-Infrastructure {
     Write-Info "Creating Azure Container resources..."
     Write-Info "Note: Initial deployment may show as 'Failed' - this is expected and will be fixed after ACR permissions are assigned"
 
-    az deployment group create --resource-group $ResourceGroup --template-file "infrastructure/main.bicep" --output table
+    if ($script:USE_EXISTING_ACR) {
+        az deployment group create --resource-group $ResourceGroup --template-file "infrastructure/main.bicep" --parameters "useExistingAcr=true" "existingAcrName=$($script:ACR_NAME)" "existingAcrResourceGroup=$($script:ACR_RESOURCE_GROUP)" --output table
+    }
+    else {
+        az deployment group create --resource-group $ResourceGroup --template-file "infrastructure/main.bicep" --output table
+    }
 
     Write-Info "Azure Container resources deployment completed!"
 }
@@ -759,7 +825,11 @@ function Get-Deployment-Outputs {
     Write-Info "Getting deployment outputs..."
 
     # Get ACR and Container App details
-    $acrName = az acr list --resource-group $ResourceGroup --query "[0].name" -o tsv
+    $acrName = $script:ACR_NAME
+    if ([string]::IsNullOrWhiteSpace($acrName)) {
+        $acrName = az acr list --resource-group $script:ACR_RESOURCE_GROUP --query "[0].name" -o tsv
+        $script:ACR_NAME = $acrName
+    }
     $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
     
     $script:CONTAINER_REGISTRY = "$acrName.azurecr.io"
@@ -778,7 +848,7 @@ function Build-And-Push-Image {
 
     try {
         # Login to ACR - specify resource group to avoid auto-discovery issues
-        az acr login --name $ACR_NAME --resource-group $script:RESOURCE_GROUP
+        az acr login --name $ACR_NAME --resource-group $script:ACR_RESOURCE_GROUP
         
         if ($LASTEXITCODE -ne 0) {
             throw "ACR login failed with exit code $LASTEXITCODE"
@@ -840,7 +910,7 @@ function Update-Container-App {
     Write-Info "Current Tenant ID: $CURRENT_TENANT_ID"
 
     # Get Cosmos DB endpoint
-    $cosmosEndpoint = az cosmosdb show --name $CosmosAccountName --resource-group $ResourceGroup --query "documentEndpoint" --output tsv
+    $cosmosEndpoint = az cosmosdb show --name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --query "documentEndpoint" --output tsv
     Write-Info "Cosmos DB Endpoint: $cosmosEndpoint"
     
     # Get Container App to extract existing environment variables
@@ -864,16 +934,18 @@ function Update-Container-App {
         Write-Info "Container App is already using SystemAssigned managed identity"
     }
     
-    # Get existing environment variables to extract Microsoft Foundry and embedding settings
+    # Get existing environment variables to extract Azure AI Services endpoint and embedding settings
     $existingEnvVars = $containerApp.properties.template.containers[0].env
-    $aifProjectEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value
+    $azureAiServiceEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value
     $embeddingDeployment = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_EMBEDDING_DEPLOYMENT" }).value
     
-    if (-not $aifProjectEndpoint) {
+    if (-not $azureAiServiceEndpoint) {
         Write-Warn "OPENAI_ENDPOINT not found in existing container app configuration"
-        Write-Warn "Please set this manually using: az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars 'OPENAI_ENDPOINT=<your-endpoint>'"
+        Write-Warn "Please set this manually using: az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --set-env-vars 'OPENAI_ENDPOINT=<your-azure-ai-services-endpoint>'"
     } else {
-        Write-Info "Microsoft Foundry Endpoint: $aifProjectEndpoint"
+        Write-Info "Azure AI Services Endpoint: $azureAiServiceEndpoint"
+        # Store for validation
+        $script:OPENAI_ENDPOINT = $azureAiServiceEndpoint
     }
     
     if (-not $embeddingDeployment) {
@@ -893,8 +965,8 @@ function Update-Container-App {
         "ASPNETCORE_URLS=http://+:8080"
     )
     
-    if ($aifProjectEndpoint) {
-        $envVars += "OPENAI_ENDPOINT=$aifProjectEndpoint"
+    if ($azureAiServiceEndpoint) {
+        $envVars += "OPENAI_ENDPOINT=$azureAiServiceEndpoint"
     }
     
     if ($embeddingDeployment) {
@@ -958,10 +1030,14 @@ function Update-Container-App {
     
     # Get ACR credentials and configure registry
     Write-Info "Configuring ACR credentials for container app..."
-    $acrName = az acr list --resource-group $ResourceGroup --query "[0].name" -o tsv
-    $acrLoginServer = az acr show --name $acrName --resource-group $ResourceGroup --query "loginServer" -o tsv
-    $acrUsername = az acr credential show --name $acrName --resource-group $ResourceGroup --query "username" -o tsv
-    $acrPassword = az acr credential show --name $acrName --resource-group $ResourceGroup --query "passwords[0].value" -o tsv
+    $acrName = $script:ACR_NAME
+    if ([string]::IsNullOrWhiteSpace($acrName)) {
+        $acrName = az acr list --resource-group $script:ACR_RESOURCE_GROUP --query "[0].name" -o tsv
+        $script:ACR_NAME = $acrName
+    }
+    $acrLoginServer = az acr show --name $acrName --resource-group $script:ACR_RESOURCE_GROUP --query "loginServer" -o tsv
+    $acrUsername = az acr credential show --name $acrName --resource-group $script:ACR_RESOURCE_GROUP --query "username" -o tsv
+    $acrPassword = az acr credential show --name $acrName --resource-group $script:ACR_RESOURCE_GROUP --query "passwords[0].value" -o tsv
     
     Write-Info "ACR Login Server: $acrLoginServer"
     Write-Info "ACR Username: $acrUsername"
@@ -1104,18 +1180,22 @@ function Assign-Cosmos-RBAC {
 
     Write-Info "Container App MI Principal ID: $ACA_MI_PRINCIPAL_ID"
     
-    # Assign Cosmos DB Data Reader role
+    # Assign Cosmos DB Built-in Data Reader role at Cosmos native data-plane root scope (/)
+    # Native Cosmos RBAC scopes are "/", "/dbs/{db}", "/dbs/{db}/colls/{coll}" - not ARM resource IDs.
     Write-Info "Assigning Cosmos DB Data Reader role..."
-    $cosmosResourceId = "/subscriptions/$((az account show --query id -o tsv))/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccountName"
-    $roleDefinitionId = "00000000-0000-0000-0000-000000000001"
+    $subscriptionId = az account show --query id -o tsv
+    $roleDefinitionGuid = "00000000-0000-0000-0000-000000000001"
+    $roleDefinitionResourceId = "/subscriptions/$subscriptionId/resourceGroups/$($script:COSMOS_RESOURCE_GROUP)/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccountName/sqlRoleDefinitions/$roleDefinitionGuid"
+    $cosmosScope = "/"
 
-    $existingAssignment = az cosmosdb sql role assignment list --account-name $CosmosAccountName --resource-group $ResourceGroup --query "[?principalId=='$ACA_MI_PRINCIPAL_ID']" | ConvertFrom-Json
+    $existingAssignment = az cosmosdb sql role assignment list --account-name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --query "[?principalId=='$ACA_MI_PRINCIPAL_ID' && scope=='$cosmosScope' && contains(roleDefinitionId, '$roleDefinitionGuid')]" | ConvertFrom-Json
 
     if ($existingAssignment.Count -eq 0) {
-        az cosmosdb sql role assignment create --account-name $CosmosAccountName --resource-group $ResourceGroup --role-definition-id $roleDefinitionId --principal-id $ACA_MI_PRINCIPAL_ID --scope $cosmosResourceId
-        Write-Info "Successfully assigned Cosmos DB Data Reader role to Container App MI"
+        az cosmosdb sql role assignment create --account-name $CosmosAccountName --resource-group $script:COSMOS_RESOURCE_GROUP --role-definition-id $roleDefinitionResourceId --principal-id $ACA_MI_PRINCIPAL_ID --scope $cosmosScope
+        Write-Info "Successfully assigned Cosmos DB Data Reader role to Container App MI at scope '/'"
+        Write-Info "Role assignment propagation may take a few minutes."
     } else {
-        Write-Info "Cosmos DB Data Reader role assignment already exists"
+        Write-Info "Cosmos DB Data Reader role assignment already exists at scope '/'"
     }
     
     # Export variables for use in deployment summary
@@ -1124,22 +1204,22 @@ function Assign-Cosmos-RBAC {
 }
 
 function Assign-AI-Foundry-RBAC {
-    Write-Info "Assigning Microsoft Foundry / Azure OpenAI permissions to Container App Managed Identity..."
+    Write-Info "Assigning Azure AI Services permissions to Container App Managed Identity..."
 
-    # Get Container App to extract OpenAI endpoint
+    # Get Container App to extract Azure AI Services endpoint
     $containerApp = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup | ConvertFrom-Json
     $existingEnvVars = $containerApp.properties.template.containers[0].env
-    $aifProjectEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value
+    $azureAiServiceEndpoint = ($existingEnvVars | Where-Object { $_.name -eq "OPENAI_ENDPOINT" }).value
     
-    if (-not $aifProjectEndpoint) {
-        Write-Warn "OPENAI_ENDPOINT not configured. Skipping Microsoft Foundry RBAC assignment."
+    if (-not $azureAiServiceEndpoint) {
+        Write-Warn "OPENAI_ENDPOINT not configured. Skipping Azure AI Services RBAC assignment."
         return
     }
     
-    Write-Info "AI Foundry Endpoint: $aifProjectEndpoint"
+    Write-Info "Azure AI Services Endpoint: $azureAiServiceEndpoint"
     
     # Search for Cognitive Services accounts in the resource group
-    Write-Info "Searching for Cognitive Services / Microsoft Foundry resources in resource group..."
+    Write-Info "Searching for Azure AI Services (Cognitive Services) resources in resource group..."
     $cognitiveAccounts = az cognitiveservices account list --resource-group $ResourceGroup | ConvertFrom-Json
     
     if (-not $cognitiveAccounts -or $cognitiveAccounts.Count -eq 0) {
@@ -1149,16 +1229,26 @@ function Assign-AI-Foundry-RBAC {
         return
     }
     
-    # If it's an AI Foundry endpoint (services.ai.azure.com), try to find the connected account
+    # Match endpoint to Cognitive Services account
     $matchingAccount = $null
     
-    if ($aifProjectEndpoint -match "\.services\.ai\.azure\.com") {
-        Write-Info "Detected AI Foundry project endpoint format"
+    if ($azureAiServiceEndpoint -match "\.services\.ai\.azure\.com") {
+        Write-Warn "ERROR: The endpoint appears to be a Microsoft Foundry project URL."
+        Write-Warn "Please use the Azure AI Services account endpoint instead."
+        Write-Warn "How to get the correct endpoint:"
+        Write-Warn "  1. Go to Azure Portal > Cognitive Services / AI Services resource"
+        Write-Warn "  2. Copy the endpoint URL from the resource's Overview page"
+        Write-Warn "  3. It should look like: https://<resource-name>.cognitiveservices.azure.com/"
+        return
+    }
+    
+    if ($azureAiServiceEndpoint -match "\.cognitiveservices\.azure\.com") {
+        Write-Info "Detected Azure AI Services (Cognitive Services) endpoint"
         
-        # For AI Foundry, we typically want OpenAI accounts in the same resource group
+        # Try to find the matching Cognitive Services account
         # Prefer accounts with "openai" in the endpoint or kind
         foreach ($account in $cognitiveAccounts) {
-            if ($account.kind -eq "OpenAI" -or $account.properties.endpoint -match "openai\.azure\.com") {
+            if ($account.kind -eq "OpenAI" -or $account.properties.endpoint -match "openai\.cognitiveservices\.azure\.com") {
                 $matchingAccount = $account
                 Write-Info "Found OpenAI account for Microsoft Foundry project: $($account.name)"
                 break
@@ -1172,8 +1262,8 @@ function Assign-AI-Foundry-RBAC {
         }
     }
     else {
-        # Direct endpoint match for classic Azure OpenAI
-        $endpointHost = ([System.Uri]$aifProjectEndpoint).Host
+        # Direct endpoint match for Azure AI Services
+        $endpointHost = ([System.Uri]$azureAiServiceEndpoint).Host
         foreach ($account in $cognitiveAccounts) {
             $accountEndpoint = $account.properties.endpoint
             if ($accountEndpoint -and ($accountEndpoint.Contains($endpointHost) -or $endpointHost.Contains($account.name))) {
@@ -1185,12 +1275,12 @@ function Assign-AI-Foundry-RBAC {
     
     if (-not $matchingAccount) {
         Write-Warn "Could not automatically determine which Cognitive Services account to use"
-        Write-Warn "Found these accounts in resource group:"
+        Write-Warn "Found these Cognitive Services accounts in resource group:"
         foreach ($account in $cognitiveAccounts) {
             Write-Warn "  - $($account.name): $($account.properties.endpoint) (Kind: $($account.kind))"
         }
         Write-Warn ""
-        Write-Warn "Attempting to assign role to all OpenAI accounts in the resource group..."
+        Write-Warn "Attempting to assign 'Cognitive Services OpenAI User' role to all OpenAI accounts..."
         
         # Try to assign to all OpenAI accounts
         $assigned = $false
@@ -1343,6 +1433,9 @@ function Verify-Container-App-Status {
 }
 
 function Show-Deployment-Summary {
+    # Validate Azure AI Services endpoint before final deployment
+    Validate-AzureAiServicesEndpoint
+    
     Write-Info "Deployment Summary (JSON):"
     
     # Create JSON summary (following PostgreSQL pattern exactly)
@@ -1357,6 +1450,9 @@ function Show-Deployment-Summary {
         ACA_MI_PRINCIPAL_ID = $script:ACA_MI_PRINCIPAL_ID
         ACA_MI_DISPLAY_NAME = $script:ACA_MI_DISPLAY_NAME
         RESOURCE_GROUP = $ResourceGroup
+        COSMOS_RESOURCE_GROUP = $script:COSMOS_RESOURCE_GROUP
+        ACR_RESOURCE_GROUP = $script:ACR_RESOURCE_GROUP
+        ACR_NAME = $script:ACR_NAME
         SUBSCRIPTION_ID = (az account show --query id -o tsv)
         TENANT_ID = (az account show --query tenantId -o tsv)
         COSMOS_ACCOUNT_NAME = $CosmosAccountName
@@ -1403,6 +1499,47 @@ function Update-Frontend-Config {
 }
 
 # Main function (following PostgreSQL pattern)
+function Validate-AzureAiServicesEndpoint {
+    # Validate OPENAI_ENDPOINT format. The application supports three types:
+    # 1. Azure AI Services (Cognitive Services): https://<resource>.cognitiveservices.azure.com/
+    # 2. OpenAI Native API: https://api.openai.com/v1
+    # 3. Azure AI Foundry: https://<resource>.services.ai.azure.com/api/projects/<project-name>
+    if (-not $script:OPENAI_ENDPOINT) {
+        return  # No endpoint configured yet is OK
+    }
+    
+    # If endpoint is .services.ai.azure.com, it MUST be a valid Foundry project endpoint with /api/projects/
+    if ($script:OPENAI_ENDPOINT -match "\.services\.ai\.azure\.com") {
+        if ($script:OPENAI_ENDPOINT -notmatch "/api/projects/") {
+            Write-Error @"
+ERROR: Invalid Azure AI Foundry endpoint format
+
+The OPENAI_ENDPOINT contains '.services.ai.azure.com' but is not a valid Azure AI Foundry project endpoint.
+
+CORRECT FORMAT (Azure AI Foundry):
+  https://<resource>.services.ai.azure.com/api/projects/<project-name>
+
+INCORRECT FORMATS:
+  https://<resource>.services.ai.azure.com/
+  https://<resource>.services.ai.azure.com/api/projects/
+
+TO FIX:
+  1. Go to Azure Portal > AI Foundry project
+  2. Copy the full project endpoint URL (must include /api/projects/<project-name>)
+  3. Update OPENAI_ENDPOINT to the complete Foundry project endpoint
+
+ALTERNATIVE (Azure AI Services / Cognitive Services):
+  https://<resource>.cognitiveservices.azure.com/
+
+For more information, see: https://aka.ms/foundry-endpoints
+"@
+            exit 1
+        }
+        # Valid Foundry endpoint, proceed
+        Write-Info "Validated Azure AI Foundry endpoint: $script:OPENAI_ENDPOINT"
+    }
+}
+
 function Main {
     param($Arguments)
     

@@ -7,20 +7,23 @@ using AzureCosmosDB.MCP.Toolkit.Services;
 namespace AzureCosmosDB.MCP.Toolkit.Controllers;
 
 [ApiController]
-[Route("mcp")]
+[Route("mcp/http")]
 public class MCPProtocolController : ControllerBase
 {
     private readonly CosmosDbToolsService _cosmosDbTools;
     private readonly AuthenticationService _authService;
+    private readonly McpToolRequestValidator _requestValidator;
     private readonly ILogger<MCPProtocolController> _logger;
 
     public MCPProtocolController(
         CosmosDbToolsService cosmosDbTools, 
         AuthenticationService authService,
+        McpToolRequestValidator requestValidator,
         ILogger<MCPProtocolController> logger)
     {
         _cosmosDbTools = cosmosDbTools;
         _authService = authService;
+        _requestValidator = requestValidator;
         _logger = logger;
     }
 
@@ -101,7 +104,6 @@ public class MCPProtocolController : ControllerBase
             // Log authentication information
             _logger.LogInformation("Received MCP request: {Method} with ID: {Id} from {UserInfo}", 
                 method, id, _authService.GetUserIdentityInfo());
-            _logger.LogInformation("Full request body: {RequestBody}", requestJson.GetRawText());
 
             // Set proper headers for streaming response and CORS
             Response.Headers["Cache-Control"] = "no-cache";
@@ -150,7 +152,8 @@ public class MCPProtocolController : ControllerBase
                                     inputSchema = new {
                                         type = "object",
                                         properties = new { },
-                                        required = new string[] { }
+                                        required = new string[] { },
+                                        additionalProperties = false
                                     }
                                 },
                                 new { 
@@ -159,9 +162,10 @@ public class MCPProtocolController : ControllerBase
                                     inputSchema = new {
                                         type = "object",
                                         properties = new {
-                                            databaseId = new { type = "string", description = "Database id to list containers from" }
+                                            databaseId = new { type = "string", description = "Database id to list containers from", maxLength = 256 }
                                         },
-                                        required = new string[] { "databaseId" }
+                                        required = new string[] { "databaseId" },
+                                        additionalProperties = false
                                     }
                                 },
                                 new { 
@@ -170,11 +174,12 @@ public class MCPProtocolController : ControllerBase
                                     inputSchema = new {
                                         type = "object",
                                         properties = new {
-                                            databaseId = new { type = "string", description = "Database id containing the container" },
-                                            containerId = new { type = "string", description = "Container id to query" },
-                                            n = new { type = "integer", description = "Number of documents to return (1-20)" }
+                                            databaseId = new { type = "string", description = "Database id containing the container", maxLength = 256 },
+                                            containerId = new { type = "string", description = "Container id to query", maxLength = 256 },
+                                            n = new { type = "integer", description = "Number of documents to return (1-20)", minimum = 1, maximum = 20 }
                                         },
-                                        required = new string[] { "databaseId", "containerId", "n" }
+                                        required = new string[] { "databaseId", "containerId", "n" },
+                                        additionalProperties = false
                                     }
                                 },
                                 new { 
@@ -183,13 +188,14 @@ public class MCPProtocolController : ControllerBase
                                     inputSchema = new {
                                         type = "object",
                                         properties = new {
-                                            databaseId = new { type = "string", description = "Database id containing the container" },
-                                            containerId = new { type = "string", description = "Container id to query" },
-                                            property = new { type = "string", description = "Document property to search" },
-                                            searchPhrase = new { type = "string", description = "Search term to look for" },
-                                            n = new { type = "integer", description = "Number of documents to return (1-20)" }
+                                            databaseId = new { type = "string", description = "Database id containing the container", maxLength = 256 },
+                                            containerId = new { type = "string", description = "Container id to query", maxLength = 256 },
+                                            property = new { type = "string", description = "Document property to search", maxLength = 256 },
+                                            searchPhrase = new { type = "string", description = "Search term to look for", maxLength = 2048 },
+                                            n = new { type = "integer", description = "Number of documents to return (1-20)", minimum = 1, maximum = 20 }
                                         },
-                                        required = new string[] { "databaseId", "containerId", "property", "searchPhrase", "n" }
+                                        required = new string[] { "databaseId", "containerId", "property", "searchPhrase", "n" },
+                                        additionalProperties = false
                                     }
                                 },
                                 new { 
@@ -198,11 +204,12 @@ public class MCPProtocolController : ControllerBase
                                     inputSchema = new {
                                         type = "object",
                                         properties = new {
-                                            databaseId = new { type = "string", description = "Database id containing the container" },
-                                            containerId = new { type = "string", description = "Container id to query" },
-                                            id = new { type = "string", description = "The id of the document to find" }
+                                            databaseId = new { type = "string", description = "Database id containing the container", maxLength = 256 },
+                                            containerId = new { type = "string", description = "Container id to query", maxLength = 256 },
+                                            id = new { type = "string", description = "The id of the document to find", maxLength = 256 }
                                         },
-                                        required = new string[] { "databaseId", "containerId", "id" }
+                                        required = new string[] { "databaseId", "containerId", "id" },
+                                        additionalProperties = false
                                     }
                                 },
                                 new { 
@@ -211,10 +218,11 @@ public class MCPProtocolController : ControllerBase
                                     inputSchema = new {
                                         type = "object",
                                         properties = new {
-                                            databaseId = new { type = "string", description = "Database id containing the container" },
-                                            containerId = new { type = "string", description = "Container id to inspect" }
+                                            databaseId = new { type = "string", description = "Database id containing the container", maxLength = 256 },
+                                            containerId = new { type = "string", description = "Container id to inspect", maxLength = 256 }
                                         },
-                                        required = new string[] { "databaseId", "containerId" }
+                                        required = new string[] { "databaseId", "containerId" },
+                                        additionalProperties = false
                                     }
                                 },
                                 new { 
@@ -223,14 +231,15 @@ public class MCPProtocolController : ControllerBase
                                     inputSchema = new {
                                         type = "object",
                                         properties = new {
-                                            databaseId = new { type = "string", description = "Database id containing the container" },
-                                            containerId = new { type = "string", description = "Container id to query" },
-                                            searchText = new { type = "string", description = "Text to search for semantically similar content" },
-                                            vectorProperty = new { type = "string", description = "Property name where vector embeddings are stored" },
-                                            selectProperties = new { type = "string", description = "Comma-separated list of specific properties to project in results" },
-                                            topN = new { type = "integer", description = "Number of documents to return (1-50)" }
+                                            databaseId = new { type = "string", description = "Database id containing the container", maxLength = 256 },
+                                            containerId = new { type = "string", description = "Container id to query", maxLength = 256 },
+                                            searchText = new { type = "string", description = "Text to search for semantically similar content", maxLength = 2048 },
+                                            vectorProperty = new { type = "string", description = "Property name where vector embeddings are stored", maxLength = 256 },
+                                            selectProperties = new { type = "string", description = "Comma-separated list of specific properties to project in results", maxLength = 512 },
+                                            topN = new { type = "integer", description = "Number of documents to return (1-50)", minimum = 1, maximum = 50 }
                                         },
-                                        required = new string[] { "databaseId", "containerId", "searchText", "vectorProperty", "selectProperties", "topN" }
+                                        required = new string[] { "databaseId", "containerId", "searchText", "vectorProperty", "selectProperties", "topN" },
+                                        additionalProperties = false
                                     }
                                 }
                             }
@@ -258,66 +267,87 @@ public class MCPProtocolController : ControllerBase
                     {
                         _logger.LogWarning("User does not have Mcp.Tool.Executor role. User roles: {Roles}", 
                             string.Join(", ", User.Claims.Where(c => c.Type == "roles" || c.Type.EndsWith("/role")).Select(c => c.Value)));
-                        return Forbid("Insufficient permissions. The 'Mcp.Tool.Executor' role is required to execute tools.");
+                        return StatusCode(403, new MCPResponse
+                        {
+                            JsonRpc = "2.0",
+                            Id = id,
+                            Error = new
+                            {
+                                code = -32001,
+                                message = "Forbidden",
+                                data = "The 'Mcp.Tool.Executor' role is required to execute tools. Assign this app role to the calling user or service principal in Entra ID."
+                            }
+                        });
                     }
 
-                    if (paramsObj.HasValue && paramsObj.Value.TryGetProperty("name", out var toolNameProp))
+                    if (!paramsObj.HasValue)
                     {
-                        var toolName = toolNameProp.GetString();
-                        if (toolName != null)
+                        return BadRequest(new MCPResponse
                         {
-                            var toolArgs = new Dictionary<string, object>();
-                            
-                            if (paramsObj.Value.TryGetProperty("arguments", out var argsProp))
+                            JsonRpc = "2.0",
+                            Id = id,
+                            Error = new
                             {
-                                foreach (var prop in argsProp.EnumerateObject())
-                                {
-                                    object value = prop.Value.ValueKind switch
-                                    {
-                                        JsonValueKind.String => prop.Value.GetString() ?? "",
-                                        JsonValueKind.Number => prop.Value.GetInt32(),
-                                        _ => prop.Value.ToString()
-                                    };
-                                    toolArgs[prop.Name] = value;
-                                }
+                                code = -32602,
+                                message = "Invalid params",
+                                data = "'params' must be provided for tools/call requests."
                             }
+                        });
+                    }
 
-                            var result = await ExecuteTool(toolName, toolArgs, HttpContext.RequestAborted);
+                    try
+                    {
+                        var validatedToolCall = _requestValidator.ValidateToolCall(paramsObj.Value);
+
+                        var result = await ExecuteTool(validatedToolCall.ToolName, validatedToolCall.Arguments, HttpContext.RequestAborted);
+
+                        // MCP Protocol: The 'text' field must be a string
+                        // Serialize the result to JSON string for proper MCP compliance
+                        string textContent;
+                        if (result is string strResult)
+                        {
+                            textContent = strResult;
+                        }
+                        else
+                        {
+                            textContent = JsonSerializer.Serialize(result);
+                        }
                         
-                            // MCP Protocol: The 'text' field must be a string
-                            // Serialize the result to JSON string for proper MCP compliance
-                            string textContent;
-                            if (result is string strResult)
+                        var toolResponse = new
+                        {
+                            jsonrpc = "2.0",
+                            id = id,
+                            result = new
                             {
-                                textContent = strResult;
-                            }
-                            else
-                            {
-                                textContent = JsonSerializer.Serialize(result);
-                            }
-                            
-                            var toolResponse = new
-                            {
-                                jsonrpc = "2.0",
-                                id = id,
-                                result = new
+                                content = new[]
                                 {
-                                    content = new[]
+                                    new
                                     {
-                                        new
-                                        {
-                                            type = "text",
-                                            text = textContent
-                                        }
+                                        type = "text",
+                                        text = textContent
                                     }
                                 }
-                            };
-                            _logger.LogInformation("Returning tools/call response for tool: {ToolName}", toolName);
-                            Response.ContentType = "application/json";
-                            return new JsonResult(toolResponse);
-                        }
+                            }
+                        };
+                        _logger.LogInformation("Returning tools/call response for tool: {ToolName}", validatedToolCall.ToolName);
+                        Response.ContentType = "application/json";
+                        return new JsonResult(toolResponse);
                     }
-                    break;
+                    catch (ToolInputValidationException ex)
+                    {
+                        _logger.LogWarning("Rejected tools/call payload: {Message}", ex.Message);
+                        return BadRequest(new MCPResponse
+                        {
+                            JsonRpc = "2.0",
+                            Id = id,
+                            Error = new
+                            {
+                                code = -32602,
+                                message = "Invalid params",
+                                data = ex.Message
+                            }
+                        });
+                    }
                     
                 case "notifications/initialized":
                     // Client notification that it has successfully initialized
@@ -404,18 +434,6 @@ public class MCPProtocolController : ControllerBase
         return args.TryGetValue(key, out var value) ? value?.ToString() ?? "" : "";
     }
 
-    private static int GetIntArg(Dictionary<string, object> args, string key, int defaultValue = 0)
-    {
-        if (args.TryGetValue(key, out var value))
-        {
-            if (value is JsonElement element && element.TryGetInt32(out var intValue))
-                return intValue;
-            if (int.TryParse(value?.ToString(), out var parsedValue))
-                return parsedValue;
-        }
-        return defaultValue;
-    }
-
     private static int GetRequiredIntArg(Dictionary<string, object> args, string key)
     {
         if (!args.TryGetValue(key, out var value))
@@ -423,7 +441,7 @@ public class MCPProtocolController : ControllerBase
             throw new ArgumentException($"Required parameter '{key}' is missing");
         }
 
-        if (value is JsonElement element && element.TryGetInt32(out var intValue))
+        if (value is int intValue)
             return intValue;
         if (int.TryParse(value?.ToString(), out var parsedValue))
             return parsedValue;

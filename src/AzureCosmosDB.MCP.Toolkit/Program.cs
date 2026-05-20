@@ -11,6 +11,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using System.Text;
+using AzureCosmosDB.MCP.Toolkit.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -212,26 +214,22 @@ builder.Services.AddHealthChecks();
 // Register Cosmos DB Client as a singleton for dependency injection
 builder.Services.AddSingleton(sp =>
 {
-    var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-    if (string.IsNullOrWhiteSpace(endpoint))
-    {
-        throw new InvalidOperationException("COSMOS_ENDPOINT environment variable is required.");
-    }
+    var logger = sp.GetRequiredService<ILogger<Program>>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
     
-    var credential = new DefaultAzureCredential();
-    
-    return new CosmosClient(endpoint, credential, new CosmosClientOptions
-    {
-        ApplicationName = "AzureCosmosDBMCP",
-        // Enable detailed logging for diagnostics
-        EnableContentResponseOnWrite = false,
-        RequestTimeout = TimeSpan.FromSeconds(60)
-    });
+    return CosmosClientFactory.CreateCosmosClient(configuration, logger);
 });
 
 // Register services for dependency injection
 builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.CosmosDbToolsService>();
 builder.Services.AddScoped<AzureCosmosDB.MCP.Toolkit.Services.AuthenticationService>();
+builder.Services.AddSingleton<AzureCosmosDB.MCP.Toolkit.Services.McpToolRequestValidator>();
+
+// Register MCP server with SDK transport (SSE + Streamable HTTP) for AI Foundry and other MCP clients.
+// Tools are defined below using [McpServerTool] attributes on CosmosDbMcpTools class.
+builder.Services.AddMcpServer()
+    .WithHttpTransport()
+    .WithToolsFromAssembly();
 
 // Configure forwarded headers for proxy scenarios
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -242,6 +240,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 var app = builder.Build();
+
+// Store configuration in static state for access by static tool methods
+AppState.Configuration = builder.Configuration;
 
 // Add security headers middleware to allow MSAL authentication
 app.Use(async (context, next) =>
@@ -259,20 +260,25 @@ app.Use(async (context, next) =>
     var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
     var path = context.Request.Path.Value ?? "";
     var method = context.Request.Method;
-    var userAgent = context.Request.Headers["User-Agent"].ToString();
+    var rawUserAgent = context.Request.Headers["User-Agent"].ToString();
+    var userAgent = Program.NormalizeUserAgentForTelemetry(
+        rawUserAgent,
+        out var userAgentOriginalLength,
+        out var userAgentWasTruncated,
+        out var userAgentControlCharsRemoved);
     var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     
-    // Log all requests with User-Agent for analytics
+    // Log a normalized, bounded User-Agent value to reduce telemetry/dashboard abuse risk.
     logger.LogInformation(
-        "Request: {Method} {Path} | User-Agent: {UserAgent} | Client-IP: {ClientIp}", 
-        method, path, string.IsNullOrEmpty(userAgent) ? "Not-Specified" : userAgent, clientIp);
+        "Request: {Method} {Path} | User-Agent: {UserAgent} | UA-Original-Length: {UserAgentOriginalLength} | UA-Truncated: {UserAgentWasTruncated} | UA-ControlChars-Removed: {UserAgentControlCharsRemoved} | Client-IP: {ClientIp}", 
+        method, path, userAgent, userAgentOriginalLength, userAgentWasTruncated, userAgentControlCharsRemoved, clientIp);
     
     // Detailed logging for MCP endpoints
     if (path.StartsWith("/mcp", StringComparison.OrdinalIgnoreCase))
     {
         logger.LogInformation("=== MCP REQUEST DETAILS ===");
         logger.LogInformation("Method: {Method}, Path: {Path}", method, path);
-        logger.LogInformation("User-Agent: {UserAgent}", string.IsNullOrEmpty(userAgent) ? "Not-Specified" : userAgent);
+        logger.LogInformation("User-Agent: {UserAgent}", userAgent);
         logger.LogInformation("Client-IP: {ClientIp}", clientIp);
         
         // Log other relevant headers (excluding sensitive data)
@@ -318,22 +324,82 @@ if (isDevelopment || devBypassAuth)
 // Map controllers last
 app.MapControllers();
 
-// Note: Commenting out built-in MCP endpoint to use custom controller
-// Map MCP endpoints with specific path
-// app.MapMcp("/mcp");
+// Map MCP SDK endpoint at /mcp — provides SSE transport (GET /mcp) and Streamable HTTP (POST /mcp).
+// This is what AI Foundry, Claude Desktop, and other standard MCP clients connect to.
+// The custom /mcp/http controller endpoint is retained for the built-in web UI tester.
+if (!devBypassAuth)
+{
+    app.MapMcp("/mcp").RequireAuthorization();
+}
+else
+{
+    app.MapMcp("/mcp");
+}
 
 // Add a simple root endpoint as fallback
 app.MapGet("/", () => Results.Redirect("/index.html"));
 
 app.Run();
 
+// Static configuration holder for access in static tool methods
+internal static class AppState
+{
+    public static IConfiguration? Configuration { get; set; }
+}
+
+public partial class Program
+{
+    private const int MaxUserAgentLength = 256;
+
+    public static string NormalizeUserAgentForTelemetry(string? userAgent, out int originalLength, out bool wasTruncated, out int controlCharsRemoved)
+    {
+        originalLength = userAgent?.Length ?? 0;
+        wasTruncated = false;
+        controlCharsRemoved = 0;
+
+        if (string.IsNullOrWhiteSpace(userAgent))
+        {
+            return "Not-Specified";
+        }
+
+        var normalized = userAgent.Normalize(NormalizationForm.FormKC);
+        var sb = new StringBuilder(normalized.Length);
+
+        foreach (var ch in normalized)
+        {
+            if (char.IsControl(ch))
+            {
+                controlCharsRemoved++;
+                continue;
+            }
+
+            sb.Append(ch);
+        }
+
+        var sanitized = sb.ToString().Trim();
+        if (sanitized.Length == 0)
+        {
+            return "Not-Specified";
+        }
+
+        if (sanitized.Length > MaxUserAgentLength)
+        {
+            wasTruncated = true;
+            sanitized = sanitized[..MaxUserAgentLength];
+        }
+
+        return sanitized;
+    }
+}
+
 [McpServerToolType]
 public static class CosmosDbTools
 {
     // Environment variables used:
     // COSMOS_ENDPOINT - Cosmos DB account endpoint
-    // OPENAI_ENDPOINT - Microsoft Foundry project endpoint (or legacy Azure OpenAI endpoint)
-    // OPENAI_EMBEDDING_DEPLOYMENT - Embedding model deployment name in Microsoft Foundry/OpenAI
+    // OPENAI_ENDPOINT - Azure AI Services account endpoint, e.g. https://<resource>.cognitiveservices.azure.com/
+    //                   Do NOT use Foundry project URLs (https://*.services.ai.azure.com/api/projects/...)
+    // OPENAI_EMBEDDING_DEPLOYMENT - Embedding model deployment name (e.g. text-embedding-3-small)
     // Auth uses Entra ID via DefaultAzureCredential (supports Managed Identity and service principals).
 
     [McpServerTool, Description("Lists databases available in the Cosmos DB account.")]
@@ -734,7 +800,7 @@ public static class CosmosDbTools
         {
             // Validate environment variables
             var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
-            // OPENAI_ENDPOINT can be either a Microsoft Foundry project endpoint or legacy Azure OpenAI endpoint
+            // OPENAI_ENDPOINT must be the Azure AI Services account endpoint, not a Foundry project URL
             // Microsoft Foundry projects expose OpenAI-compatible endpoints (recommended)
             var openaiEndpoint = Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
             var embeddingDeployment = Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
@@ -804,14 +870,18 @@ public static class CosmosDbTools
 
             var credential = new DefaultAzureCredential();
 
-            // Generate embedding using Azure OpenAI
+            // Generate embedding using the appropriate embedding service
+            // (Azure AI Services, OpenAI native, or Azure AI Foundry)
             float[] embedding;
             try
             {
-                var openaiClient = new AzureOpenAIClient(new Uri(openaiEndpoint), credential);
-                var embeddingClient = openaiClient.GetEmbeddingClient(embeddingDeployment);
-                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(searchText);
-                embedding = embeddingResponse.Value.ToFloats().ToArray();
+                if (AppState.Configuration == null)
+                {
+                    return JsonSerializer.Serialize(new { error = "Application configuration not initialized." });
+                }
+                
+                var embeddingClient = EmbeddingClientFactory.CreateEmbeddingClient(AppState.Configuration);
+                embedding = await embeddingClient.GenerateEmbeddingAsync(searchText, embeddingDeployment);
             }
             catch (Exception ex)
             {
@@ -831,7 +901,7 @@ public static class CosmosDbTools
 
             // Build vector search query - prepend "c." to vectorProperty as well
             var queryText = $@"
-                SELECT TOP @topN {selectClause}, VectorDistance(c.{vectorProperty}, @embedding) as _score
+                SELECT TOP @topN {selectClause}, VectorDistance(c.{vectorProperty}, @embedding) as score
                 FROM c
                 ORDER BY VectorDistance(c.{vectorProperty}, @embedding)";
 

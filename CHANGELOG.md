@@ -7,38 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-05-20
+
+### Changed
+- Updated release workflow trigger so all `v*` tag pushes reliably create GitHub Releases.
+- Added `CONTRIBUTING.md` and linked contribution guidance from the README.
+
+### Fixed
+- Added bug-fix issue tracking entries for the latest fixes (excluding issue #89).
+
+## [1.1.0] - 2026-05-20
+
 ### Added
-- Initial release of Azure Cosmos DB MCP Toolkit
-- Document querying and full-text search capabilities
-- AI-powered vector similarity search with Azure OpenAI embeddings
-- Container schema discovery and analysis
-- Secure Entra ID authentication
-- Model Context Protocol integration for AI agents
+- **Multi-provider embedding support**: Vector search now supports Azure AI Services (Cognitive Services), Azure AI Foundry projects, and OpenAI native API.
+- **Automatic endpoint detection**: System automatically identifies the embedding endpoint type based on URL pattern.
+- New `IEmbeddingClient` abstraction layer with provider-specific implementations.
 
-### Features
-- **ListDatabases**: Lists databases available in the Cosmos DB account
-- **ListCollections**: Lists containers (collections) for the specified database
-- **GetRecentDocuments**: Gets the most recent N documents ordered by timestamp
-- **TextSearch**: Full-text search within document properties
-- **FindDocumentByID**: Find a document by its ID
-- **GetApproximateSchema**: Approximates container schema by sampling documents
-- **VectorSearch**: Performs vector search using Azure OpenAI embeddings
+### Changed
+- Enhanced `OPENAI_ENDPOINT` configuration to accept multiple endpoint formats (Azure AI Services, Azure AI Foundry, OpenAI native).
+- Updated documentation and environment examples to reflect multi-provider support.
 
-### Environment Variables
-- `COSMOS_ENDPOINT`: Azure Cosmos DB endpoint URL
-- `OPENAI_ENDPOINT`: Azure OpenAI endpoint URL
-- `OPENAI_EMBEDDING_DEPLOYMENT`: Azure OpenAI embedding deployment name
+### Fixed
+- Fixed token retrieval issues with Azure CLI usage (issue #83).
+- Corrected README Client ID field reference in `deployment-info.json` guidance (issue #82).
+- Fixed parsing failure in `Assign-Role-To-Users.ps1` query escaping (issue #81).
+- Fixed 404 error when downloading `cosmos-mcp-client.html` during web testing (issue #77).
+- Added missing JWT token acquisition steps in VS Code MCP setup docs (issue #76).
+- Fixed Foundry connection script parameter handling when using project name (issue #75).
+- Fixed failures in `scripts/Verify-Role-Assignments.ps1` (issue #74).
+- Fixed failures in `scripts/Assign-Role-To-Users.ps1` (issue #73).
+- Fixed failures in `scripts/Assign-Role-To-Current-User.ps1` (issue #72).
+- Included additional bug fix tracked under issue #60.
 
-### Todo
-- Host in Azure Container Apps (or Azure Functions)
-- Expose an MCP Server endpoint from hosting platform (ACA, AF)
-- Authenticate to MCP Server via EntraID/MI
-- Test via Microsoft Foundry Agents Service
+## [1.1.0-rc.1] - 2026-05-18
+
+### Added
+- Release channel guidance and customer-facing versioning policy in the README.
+
+### Changed
+- Added startup validation for `OPENAI_ENDPOINT` to reject Foundry project URLs and provide actionable guidance.
+- Trimmed OpenAI configuration values before use to reduce failures caused by accidental whitespace.
+- Enabled MCP HTTP transport registration for SDK endpoint mapping.
+
+### Fixed
+- Prevented 500 errors during role-denied tool calls by returning a structured 403 JSON-RPC response.
+- Restored MCP compatibility for external clients by mapping the SDK endpoint at `/mcp`.
+- Moved custom JSON-RPC controller endpoint to `/mcp/http` and updated web UI calls accordingly.
+- Renamed vector score alias from `_score` to `score` so Cosmos query results include similarity score.
 
 ## [1.0.0] - 2025-09-15
 
 ### Added
-- Initial version of the Azure Cosmos DB MCP Toolkit
-- Basic MCP server functionality
-- Azure Cosmos DB integration
-- Azure OpenAI integration for vector search
+- Initial version of the Azure Cosmos DB MCP Toolkit.
+- Basic MCP server functionality.
+- Azure Cosmos DB integration.
+- Azure OpenAI integration for vector search.

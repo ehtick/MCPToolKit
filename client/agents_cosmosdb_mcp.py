@@ -39,6 +39,9 @@ agent = project_client.agents.create_version(
         model=model_deployment,
         instructions="""
         You are a helpful agent that can use MCP tools to assist users with Azure Cosmos DB queries.
+        Respect each tool's declared input schema exactly.
+        Do not invent argument names, and keep free-form text inputs concise and relevant.
+        If a tool call fails with an invalid-parameters style error, correct the arguments and retry with a valid payload.
         
         Available tools:
         - list_databases: Lists all databases in the Cosmos DB account
@@ -57,6 +60,8 @@ agent = project_client.agents.create_version(
 )
 print(f"Agent created (name: {agent.name}, version: {agent.version})")
 print(f"MCP Server: {mcp_server_label} at {mcp_server_url}")
+
+print("The MCP server enforces strict parameter validation and rejects unknown or malformed tool arguments.")
 
 # Sample questions for testing
 input_text = [

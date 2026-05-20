@@ -47,6 +47,17 @@ The script creates an AI agent that can:
 - Perform vector search
 - Get container schemas
 
+## Input Validation
+
+The MCP server now enforces strict server-side validation for tool inputs.
+
+- Tool calls must match the declared `inputSchema` exactly.
+- Unknown fields are rejected.
+- Required fields, types, and numeric bounds are enforced.
+- Free-form string inputs are length-limited and normalized by the server.
+
+For this sample client, tool invocation is still delegated to the Foundry agent runtime rather than manually constructing `tools/call` payloads. That means no client-side protocol changes are required, but invalid tool arguments may now fail fast instead of being loosely accepted.
+
 ## Sample Questions
 
 Edit the `input_text` array in the script to test different questions:
@@ -74,3 +85,9 @@ If authentication fails:
 1. Verify the Entra App Client ID matches your `deployment-info.json`
 2. Check role assignments are in place (run `Setup-AIFoundry-RoleAssignment.ps1` if needed)
 3. Ensure the container app has the correct environment variables
+
+If a tool call fails with `Invalid params`:
+1. Check that the tool arguments match the schema returned by `tools/list`.
+2. Remove any unexpected properties from the request.
+3. Make sure string values are not empty or overly long.
+4. Make sure numeric values stay within the documented ranges.

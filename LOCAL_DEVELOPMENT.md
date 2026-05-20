@@ -93,44 +93,144 @@ Invoke-RestMethod -Uri http://localhost:8080/mcp `
 
 The MCP server uses these environment variables for both local development and production:
 
-### Production Environment Variables
+### Cosmos DB Configuration
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `COSMOS_ENDPOINT` | Cosmos DB account endpoint | Yes |
-| `OPENAI_ENDPOINT` | Azure OpenAI endpoint (for vector search) | Optional |
-| `OPENAI_EMBEDDING_DEPLOYMENT` | Embedding model deployment name | Optional |
-| `ENTRA_CLIENTID` | Entra App Client ID for JWT validation | Yes (production) |
-| `ENTRA_AUTHORITY` | Entra authority URL | Yes (production) |
+**For Local Development (Emulator):**
+- `COSMOS_CONNECTION_STRING` - Connection string for Cosmos DB emulator
+  - Example: `AccountEndpoint=https://localhost:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;`
+  - Takes priority if set; skips Azure credential authentication
 
-### Local Development Variables
+**For Cloud Production:**
+- `COSMOS_ENDPOINT` - Cosmos DB account endpoint URL
+  - Example: `https://myaccount.documents.azure.com:443/`
+  - Uses DefaultAzureCredential (no additional configuration needed)
 
-Create a `.env` file or set these additional environment variables for local development:
+### Embeddings/OpenAI Configuration
+
+The toolkit supports three types of embedding endpoints with automatic detection:
+
+**Azure AI Services (Cognitive Services):**
+- `OPENAI_ENDPOINT` - https://<resource>.cognitiveservices.azure.com/
+- Uses DefaultAzureCredential or `OPENAI_API_KEY` if set
+- Example: `https://my-ai-service.cognitiveservices.azure.com/`
+
+**Azure AI Foundry:**
+- `OPENAI_ENDPOINT` - https://<resource>.services.ai.azure.com/api/projects/<project-name>
+- Uses DefaultAzureCredential or `OPENAI_API_KEY` if set
+- Example: `https://my-project.services.ai.azure.com/api/projects/my-project-123`
+
+**OpenAI Native API:**
+- `OPENAI_ENDPOINT` - https://api.openai.com/v1
+- **Requires:** `OPENAI_API_KEY` (mandatory for OpenAI)
+- Example: `https://api.openai.com/v1`
+
+**Common Configuration:**
+- `OPENAI_API_KEY` - API key for authentication (optional for Azure endpoints, required for OpenAI)
+  - Example: `sk-...` (OpenAI) or Azure API key
+- `OPENAI_EMBEDDING_DEPLOYMENT` - Model/deployment name
+  - Examples: `text-embedding-3-small`, `text-embedding-3-large`, `gpt-4o-mini`
+
+### Other Configuration
 
 | Variable | Description | Local Example |
 |----------|-------------|---------------|
 | `DEV_BYPASS_AUTH` | Bypass authentication | `true` |
-| `COSMOS_ENDPOINT` | Cosmos DB endpoint | `https://localhost:8081/` (emulator) |
-| `COSMOS_KEY` | Cosmos DB key (emulator only) | Emulator default key |
-| `OPENAI_ENDPOINT` | Microsoft Foundry/OpenAI endpoint | Your Azure OpenAI endpoint |
-| `OPENAI_EMBEDDING_DEPLOYMENT` | Embedding model name | `text-embedding-ada-002` |
+| `OPENAI_EMBEDDING_DEPLOYMENT` | Embedding model name | `text-embedding-3-small` |
+| `OPENAI_EMBEDDING_DIMENSIONS` | Embedding dimensions | `1536` |
+| `ENTRA_CLIENTID` | Entra App Client ID | Yes (production) |
+| `ENTRA_AUTHORITY` | Entra authority URL | Yes (production) |
+
+### Complete Local Development Example
+
+```powershell
+# Cosmos DB Emulator (local)
+$env:COSMOS_CONNECTION_STRING = "AccountEndpoint=https://localhost:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"
+
+# Choose ONE of the following embedding providers:
+
+# Option 1: OpenAI Native API
+$env:OPENAI_ENDPOINT = "https://api.openai.com/v1"
+$env:OPENAI_API_KEY = "sk-your-openai-key"
+$env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
+
+# Option 2: Azure AI Services (with API key)
+# $env:OPENAI_ENDPOINT = "https://my-ai-service.cognitiveservices.azure.com/"
+# $env:OPENAI_API_KEY = "your-azure-key"
+# $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
+
+# Option 3: Local/Azure AI Foundry with API key
+# $env:OPENAI_ENDPOINT = "http://localhost:8000"  # or Azure Foundry URL
+# $env:OPENAI_API_KEY = "your-api-key"
+# $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
+
+# Development
+$env:DEV_BYPASS_AUTH = "true"
+```
+
+### Complete Cloud Production Example
+
+```powershell
+# Cosmos DB (cloud)
+$env:COSMOS_ENDPOINT = "https://myaccount.documents.azure.com:443/"
+# Azure credentials via DefaultAzureCredential (az login)
+
+# Choose ONE of the following embedding providers:
+
+# Option 1: Azure AI Services (cloud) with Managed Identity
+$env:OPENAI_ENDPOINT = "https://my-openai.cognitiveservices.azure.com/"
+$env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
+# Uses DefaultAzureCredential (Managed Identity)
+
+# Option 2: Azure AI Foundry (cloud) with Managed Identity
+# $env:OPENAI_ENDPOINT = "https://my-project.services.ai.azure.com/api/projects/my-project-123"
+# $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
+# Uses DefaultAzureCredential (Managed Identity)
+
+# Option 3: OpenAI Native API
+# $env:OPENAI_ENDPOINT = "https://api.openai.com/v1"
+# $env:OPENAI_API_KEY = "sk-your-openai-key"
+# $env:OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-small"
+```
 
 ## Using Cosmos DB Emulator
 
-### Install Cosmos DB Emulator
+The MCP Toolkit now supports local development with the Cosmos DB emulator via connection strings, so you don't need Azure credentials for local testing.
+
+### Option 1: Docker Compose (Easiest)
+
+The `docker-compose.yml` includes both the MCP Toolkit and Cosmos DB emulator:
+
+```powershell
+docker-compose up
+```
+
+This automatically configures:
+- Cosmos DB Emulator at `https://localhost:8081`
+- MCP Toolkit at `http://localhost:8080/mcp`
+- Pre-configured connection string for emulator
+
+### Option 2: Local Emulator + .NET Runtime
+
+#### Install Cosmos DB Emulator
 
 Download and install from: https://aka.ms/cosmosdb-emulator
 
-### Configure Connection
+#### Configure Connection String
 
-When using the emulator, set:
+Set the connection string environment variable instead of endpoint:
 
 ```powershell
-$env:COSMOS_ENDPOINT = "https://localhost:8081/"
-$env:COSMOS_KEY = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+$env:COSMOS_CONNECTION_STRING = "AccountEndpoint=https://localhost:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"
 ```
 
-> **Note**: The Cosmos DB emulator uses a well-known authentication key for local development.
+Or for cloud production, use:
+
+```powershell
+$env:COSMOS_ENDPOINT = "https://myaccount.documents.azure.com:443/"
+# Uses DefaultAzureCredential automatically
+```
+
+The connection string takes priority; if it's set, cloud credentials are not used.
 
 ## Debugging in Visual Studio / VS Code
 

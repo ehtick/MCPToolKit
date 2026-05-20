@@ -6,7 +6,10 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 
 - Azure subscription ([Free account](https://azure.microsoft.com/free/))
 - **Azure Cosmos DB account** ([Create account](https://learn.microsoft.com/azure/cosmos-db/nosql/quickstart-portal))
-- **Azure OpenAI or Microsoft Foundry project** ([Create Azure OpenAI](https://learn.microsoft.com/azure/ai-services/openai/how-to/create-resource) or [Create Microsoft Foundry project](https://learn.microsoft.com/azure/ai-studio/how-to/create-projects)) (required for vector search with embeddings)
+- **Embedding Service** (one of the following for vector search):
+  - **Azure AI Services (Cognitive Services)** with embedding model ([Create](https://learn.microsoft.com/azure/ai-services/what-are-ai-services))
+  - **Azure AI Foundry** with embedding model ([Create](https://learn.microsoft.com/azure/ai/foundry/how-to/create-projects))
+  - **OpenAI API** with API key ([Get API key](https://platform.openai.com/api-keys))
 - Azure CLI ([Install](https://docs.microsoft.com/cli/azure/install-azure-cli)) installed and authenticated
 - PowerShell 7+ ([Install](https://docs.microsoft.com/powershell/scripting/install/installing-powershell)) (for deployment scripts)
 - **Docker Desktop** ([Install](https://www.docker.com/products/docker-desktop/)) installed and running
@@ -20,7 +23,7 @@ This toolkit provides:
 
 - **Secure MCP Server**: JWT-authenticated endpoint for AI agents
 - **Azure Cosmos DB Integration**: Full CRUD operations, vector search, and schema discovery
-- **Microsoft Foundry Ready**: Optional one-step integration with Microsoft Foundry projects
+- **Azure AI Services Integration**: Automatic embeddings and vector search support
 - **Enterprise Security**: Azure Entra ID, Managed Identity, RBAC
 - **Production Ready**: Container Apps hosting with auto-scaling
 - **Local Development**: Docker Compose and .NET dev options
@@ -57,7 +60,7 @@ MCPToolKit/
 
 ## Quick Start
 
-> Ensure all resources (Azure Cosmos DB, Microsoft Foundry Project, Container App) are created in the same resource group and that Docker is running before starting the deployment.
+> Resources can be in the same or different resource groups. By default, deployment assumes the same resource group unless you pass explicit Cosmos/ACR resource-group parameters.
 
 **First, clone the repository:**
 
@@ -148,6 +151,9 @@ cd MCPToolKit
 # Optional: Specify a custom Entra App name if the default name is already taken
 # or if you don't have permissions to modify the existing app
 .\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "YOUR-RESOURCE-GROUP" -EntraAppName "My Custom MCP App"
+
+# Optional: Use Cosmos DB and ACR from different resource groups
+.\scripts\Deploy-Cosmos-MCP-Toolkit.ps1 -ResourceGroup "aca-rg" -CosmosResourceGroup "cosmos-rg" -AcrResourceGroup "acr-rg" -AcrName "mysharedacr"
 ```
 
 This script:
@@ -493,10 +499,22 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
-1. Fork the repository
-2. Create your feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+## Release Channels And Changelog
+
+Use semantic versioning with two release channels:
+
+- `Preview`: `x.y.z-preview.n` (for early adopters)
+- `GA`: `x.y.z` (production-ready)
+
+Examples:
+
+- `v1.1.0-preview.1`
+- `v1.1.0`
+
+### Customer Tracking Rules
+
+1. Every user-visible change must be added to `CHANGELOG.md` under `Unreleased`.
+2. When publishing, move `Unreleased` content into a new section `## [x.y.z(-preview.n)] - YYYY-MM-DD`.
+3. Keep one clear entry per release so customers can map behavior to versions.

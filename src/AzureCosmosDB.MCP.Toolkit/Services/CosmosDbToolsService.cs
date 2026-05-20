@@ -3,6 +3,7 @@ using System.Text.Json;
 using Azure.Identity;
 using System.Text.RegularExpressions;
 using Azure.AI.OpenAI;
+using Azure;
 
 namespace AzureCosmosDB.MCP.Toolkit.Services;
 
@@ -282,28 +283,6 @@ public class CosmosDbToolsService
     {
         try
         {
-            // Get configuration values
-            var openaiEndpoint = _configuration["OPENAI_ENDPOINT"] ?? Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
-            var embeddingDeployment = _configuration["OPENAI_EMBEDDING_DEPLOYMENT"] ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
-            var embeddingDimensionsStr = _configuration["OPENAI_EMBEDDING_DIMENSIONS"] ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DIMENSIONS");
-
-            // Validate environment variables
-            if (string.IsNullOrWhiteSpace(openaiEndpoint))
-            {
-                return new { error = "Missing required environment variable OPENAI_ENDPOINT." };
-            }
-            if (string.IsNullOrWhiteSpace(embeddingDeployment))
-            {
-                return new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." };
-            }
-
-            // Parse embedding dimensions if provided (must be a positive number to be valid)
-            int? embeddingDimensions = null;
-            if (!string.IsNullOrWhiteSpace(embeddingDimensionsStr) && int.TryParse(embeddingDimensionsStr, out int parsedDimensions) && parsedDimensions > 0)
-            {
-                embeddingDimensions = parsedDimensions;
-            }
-
             // Validate parameters
             ValidateRequiredParameter(databaseId, nameof(databaseId));
             ValidateRequiredParameter(containerId, nameof(containerId));
@@ -342,32 +321,65 @@ public class CosmosDbToolsService
 
             _logger.LogInformation("Vector search for '{SearchText}' in {DatabaseId}/{ContainerId}", searchText, databaseId, containerId);
 
-            // Generate embedding using Azure OpenAI
+            // Generate embedding using the appropriate embedding service
+            // (Azure AI Services, OpenAI native, or Azure AI Foundry)
             float[] embedding;
             try
             {
-                _logger.LogInformation("OpenAI Endpoint: {Endpoint}, Deployment: {Deployment}", openaiEndpoint, embeddingDeployment);
+                _logger.LogInformation("Creating embedding client for embedding generation");
+
+                var configuredApiKey = _configuration["OPENAI_API_KEY"]
+                    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+                var authMode = string.IsNullOrWhiteSpace(configuredApiKey) ? "azure-credential" : "api-key";
+                _logger.LogInformation("Embedding authentication mode: {AuthMode}", authMode);
                 
-                var credential = new DefaultAzureCredential();
-                var openaiClient = new AzureOpenAIClient(new Uri(openaiEndpoint), credential);
+                var embeddingClient = EmbeddingClientFactory.CreateEmbeddingClient(_configuration, _logger);
                 
-                _logger.LogInformation("Getting embedding client for deployment: {Deployment}", embeddingDeployment);
-                var embeddingClient = openaiClient.GetEmbeddingClient(embeddingDeployment);
+                var embeddingDeployment = _configuration["OPENAI_EMBEDDING_DEPLOYMENT"] 
+                    ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
                 
-                _logger.LogInformation("Generating embedding for text: {Text}{DimensionsInfo}", 
-                    searchText, 
+                if (string.IsNullOrWhiteSpace(embeddingDeployment))
+                {
+                    return new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." };
+                }
+                
+                var embeddingDimensionsStr = _configuration["OPENAI_EMBEDDING_DIMENSIONS"] 
+                    ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DIMENSIONS");
+
+                int? embeddingDimensions = null;
+                if (!string.IsNullOrWhiteSpace(embeddingDimensionsStr) && int.TryParse(embeddingDimensionsStr, out int parsedDimensions) && parsedDimensions > 0)
+                {
+                    embeddingDimensions = parsedDimensions;
+                }
+                
+                _logger.LogInformation("Generating embedding for deployment: {Deployment}{DimensionsInfo}", 
+                    embeddingDeployment,
                     embeddingDimensions.HasValue ? $" with {embeddingDimensions.Value} dimensions" : "");
-                // Generate embedding with optional dimensions parameter
-                var embeddingResponse = embeddingDimensions.HasValue
-                    ? await embeddingClient.GenerateEmbeddingAsync(searchText, new OpenAI.Embeddings.EmbeddingGenerationOptions { Dimensions = embeddingDimensions.Value }, cancellationToken)
-                    : await embeddingClient.GenerateEmbeddingAsync(searchText, cancellationToken: cancellationToken);
                 
-                embedding = embeddingResponse.Value.ToFloats().ToArray();
+                embedding = await embeddingClient.GenerateEmbeddingAsync(searchText, embeddingDeployment, cancellationToken);
                 _logger.LogInformation("Generated embedding with {Dimensions} dimensions", embedding.Length);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 401 || ex.Status == 403)
+            {
+                var configuredApiKey = _configuration["OPENAI_API_KEY"]
+                    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+                var usingApiKey = !string.IsNullOrWhiteSpace(configuredApiKey);
+
+                var hint = usingApiKey
+                    ? "OPENAI_API_KEY is configured. Verify the key matches OPENAI_ENDPOINT and has permission to use OPENAI_EMBEDDING_DEPLOYMENT."
+                    : "OPENAI_API_KEY is not configured. The service is using DefaultAzureCredential. Ensure the runtime identity has OpenAI data-plane access (for example, Cognitive Services OpenAI User) on the target resource.";
+
+                _logger.LogError(ex, "Embedding authorization failed with status {StatusCode}. Hint: {Hint}", ex.Status, hint);
+                return new
+                {
+                    error = $"Failed to generate embedding: {ex.Message}",
+                    statusCode = ex.Status,
+                    hint
+                };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate embedding. Endpoint: {Endpoint}, Deployment: {Deployment}", openaiEndpoint, embeddingDeployment);
+                _logger.LogError(ex, "Failed to generate embedding");
                 return new { error = $"Failed to generate embedding: {ex.Message}" };
             }
 
@@ -376,7 +388,7 @@ public class CosmosDbToolsService
             var selectClause = string.Join(", ", properties.Select(p => $"c.{p}"));
 
             var queryText = $@"
-                SELECT TOP @topN {selectClause}, VectorDistance(c.{vectorProperty}, @embedding) as _score
+                SELECT TOP @topN {selectClause}, VectorDistance(c.{vectorProperty}, @embedding) as score
                 FROM c
                 ORDER BY VectorDistance(c.{vectorProperty}, @embedding)";
 

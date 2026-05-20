@@ -7,20 +7,26 @@ param location string = resourceGroup().location
 @description('Cosmos DB endpoint (external resource)')
 param cosmosEndpoint string
 
-@description('AI Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Example: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/')
-param aifProjectEndpoint string
+@description('Embedding service endpoint URL. Supports Azure AI Services, Azure AI Foundry, or OpenAI.')
+param azureAiServiceEndpoint string
 
 @description('Embedding model deployment name in AI Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002')
 param embeddingDeploymentName string
-
-@description('Embedding dimensions (optional). For text-embedding-3-large/small models. Leave as 0 or blank for text-embedding-ada-002.')
-param embeddingDimensions int = 0
 
 @description('Container app name')
 param containerAppName string = '${resourcePrefix}-app'
 
 @description('Container registry name')
 param containerRegistryName string = '${replace(resourcePrefix, '-', '')}acr${uniqueString(resourceGroup().id)}'
+
+@description('Use an existing Azure Container Registry instead of creating one in this resource group')
+param useExistingAcr bool = false
+
+@description('Existing ACR name (required when useExistingAcr=true)')
+param existingAcrName string = ''
+
+@description('Resource group that contains the existing ACR (optional, defaults to current resource group)')
+param existingAcrResourceGroup string = ''
 
 @description('Entra App display name')
 param entraAppDisplayName string = '${resourcePrefix}-entra-app'
@@ -31,6 +37,7 @@ param aifProjectResourceId string = ''
 // Variables
 var containerAppEnvName = '${resourcePrefix}-env'
 var entraAppUniqueName = '${replace(toLower(entraAppDisplayName), ' ', '-')}-${uniqueString(deployment().name, resourceGroup().id)}'
+var resolvedAcrResourceGroup = empty(existingAcrResourceGroup) ? resourceGroup().name : existingAcrResourceGroup
 
 // Common tags for all resources
 var commonTags = {
@@ -51,7 +58,7 @@ module entraApp 'modules/entra-app.bicep' = {
 }
 
 // Create Container Registry
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = if (!useExistingAcr) {
   name: containerRegistryName
   location: location
   sku: {
@@ -61,6 +68,11 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
     adminUserEnabled: true
   }
   tags: commonTags
+}
+
+resource existingContainerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = if (useExistingAcr) {
+  name: existingAcrName
+  scope: resourceGroup(resolvedAcrResourceGroup)
 }
 
 // Create Container App Environment (without Log Analytics)
@@ -114,15 +126,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             // The Azure.AI.OpenAI SDK works seamlessly with both Microsoft Foundry and legacy endpoints
             {
               name: 'OPENAI_ENDPOINT'
-              value: aifProjectEndpoint
+              value: azureAiServiceEndpoint
             }
             {
               name: 'OPENAI_EMBEDDING_DEPLOYMENT'
               value: embeddingDeploymentName
-            }
-            {
-              name: 'OPENAI_EMBEDDING_DIMENSIONS'
-              value: string(embeddingDimensions)
             }
             // ASP.NET Core configuration
             {
@@ -203,7 +211,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
 // RBAC Assignments
 
 // Assign ACR Pull role to container app's system-assigned managed identity
-resource acrRoleAssignmentMI 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource acrRoleAssignmentMI 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!useExistingAcr) {
   scope: containerRegistry
   name: guid(containerRegistry.id, containerApp.id, acrPullRoleId)
   properties: {
@@ -225,8 +233,8 @@ module aifRoleAssignment 'modules/aif-role-assignment-entraapp.bicep' = if (!emp
 
 // Outputs
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
-output containerRegistryName string = containerRegistry.name
-output containerRegistryLoginServer string = containerRegistry.properties.loginServer
+output containerRegistryName string = useExistingAcr ? existingContainerRegistry!.name : containerRegistry!.name
+output containerRegistryLoginServer string = useExistingAcr ? existingContainerRegistry!.properties.loginServer : containerRegistry!.properties.loginServer
 output managedIdentityPrincipalId string = containerApp.identity.principalId
 output containerAppEnvironmentId string = containerAppEnvironment.id
 output containerAppId string = containerApp.id

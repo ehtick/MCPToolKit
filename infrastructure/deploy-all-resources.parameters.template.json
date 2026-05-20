@@ -14,10 +14,10 @@
         "description": "Your Cosmos DB endpoint. Example: https://your-cosmos-account.documents.azure.com:443/"
       }
     },
-    "aifProjectEndpoint": {
+    "azureAiServiceEndpoint": {
       "value": "",
       "metadata": {
-        "description": "Microsoft Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Examples: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/"
+        "description": "Embedding service endpoint URL. Supports Azure AI Services, Azure AI Foundry, or OpenAI."
       }
     },
     "embeddingDeploymentName": {
@@ -26,10 +26,22 @@
         "description": "Embedding model deployment name in your Microsoft Foundry project or Azure OpenAI. Common values: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002"
       }
     },
-    "embeddingDimensions": {
-      "value": 0,
+    "useExistingAcr": {
+      "value": false,
       "metadata": {
-        "description": "Embedding dimensions (optional). Example: 1536 for text-embedding-ada-002, 3072 for text-embedding-3-large. Leave empty of  0 for text-embedding-ada-002"
+        "description": "Set to true to use an existing Azure Container Registry instead of creating one"
+      }
+    },
+    "existingAcrName": {
+      "value": "",
+      "metadata": {
+        "description": "Existing Azure Container Registry name (required when useExistingAcr=true)"
+      }
+    },
+    "existingAcrResourceGroup": {
+      "value": "",
+      "metadata": {
+        "description": "Resource group containing the existing ACR (defaults to deployment resource group when empty)"
       }
     },
     "entraAppDisplayName": {

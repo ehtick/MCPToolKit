@@ -29,23 +29,16 @@
         "description": "Cosmos DB endpoint (external resource)"
       }
     },
-    "aifProjectEndpoint": {
+    "azureAiServiceEndpoint": {
       "type": "string",
       "metadata": {
-        "description": "Microsoft Foundry project endpoint (recommended) or legacy Azure OpenAI endpoint. Example: https://my-project.eastus.api.azureml.ms/ or https://my-openai.openai.azure.com/"
+        "description": "Embedding service endpoint URL. Supports Azure AI Services, Azure AI Foundry, or OpenAI."
       }
     },
     "embeddingDeploymentName": {
       "type": "string",
       "metadata": {
         "description": "Embedding model deployment name in Microsoft Foundry project or Azure OpenAI. Example: text-embedding-3-small or text-embedding-ada-002"
-      }
-    },
-    "embeddingDimensions": {
-      "type": "int",
-      "defaultValue": 0,
-      "metadata": {
-        "description": "Embedding dimensions (optional). For text-embedding-3-large/small models. Leave as 0 or blank for text-embedding-ada-002."
       }
     },
     "containerAppName": {
@@ -61,11 +54,33 @@
       "metadata": {
         "description": "Container registry name"
       }
+    },
+    "useExistingAcr": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Use an existing Azure Container Registry instead of creating one in this resource group"
+      }
+    },
+    "existingAcrName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Existing ACR name (required when useExistingAcr=true)"
+      }
+    },
+    "existingAcrResourceGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource group that contains the existing ACR (optional, defaults to current resource group)"
+      }
     }
   },
   "variables": {
     "managedIdentityName": "[format('{0}-identity', parameters('containerAppName'))]",
     "containerAppEnvName": "[format('{0}-env', parameters('resourcePrefix'))]",
+    "resolvedAcrResourceGroup": "[if(equals(parameters('existingAcrResourceGroup'), ''), resourceGroup().name, parameters('existingAcrResourceGroup'))]",
     "commonTags": {
       "Environment": "Production",
       "Application": "MCP-Toolkit"
@@ -76,6 +91,7 @@
     {
       "type": "Microsoft.ContainerRegistry/registries",
       "apiVersion": "2023-07-01",
+      "condition": "[not(parameters('useExistingAcr'))]",
       "name": "[parameters('containerRegistryName')]",
       "location": "[parameters('location')]",
       "sku": {
@@ -144,15 +160,11 @@
                 },
                 {
                   "name": "OPENAI_ENDPOINT",
-                  "value": "[parameters('aifProjectEndpoint')]"
+                  "value": "[parameters('azureAiServiceEndpoint')]"
                 },
                 {
                   "name": "OPENAI_EMBEDDING_DEPLOYMENT",
                   "value": "[parameters('embeddingDeploymentName')]"
-                },
-                {
-                  "name": "OPENAI_EMBEDDING_DIMENSIONS",
-                  "value": "[string(parameters('embeddingDimensions'))]"
                 },
                 {
                   "name": "ASPNETCORE_ENVIRONMENT",
@@ -222,6 +234,7 @@
     {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
+      "condition": "[not(parameters('useExistingAcr'))]",
       "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', parameters('containerRegistryName'))]",
       "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), variables('acrPullRoleId'))]",
       "properties": {
@@ -242,11 +255,11 @@
     },
     "containerRegistryName": {
       "type": "string",
-      "value": "[parameters('containerRegistryName')]"
+      "value": "[if(parameters('useExistingAcr'), parameters('existingAcrName'), parameters('containerRegistryName'))]"
     },
     "containerRegistryLoginServer": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer]"
+      "value": "[if(parameters('useExistingAcr'), reference(resourceId(variables('resolvedAcrResourceGroup'), 'Microsoft.ContainerRegistry/registries', parameters('existingAcrName')), '2023-07-01').loginServer, reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer)]"
     },
     "managedIdentityPrincipalId": {
       "type": "string",
@@ -271,7 +284,7 @@
     "postDeploymentInfo": {
       "type": "object",
       "value": {
-        "containerRegistry": "[parameters('containerRegistryName')]",
+        "containerRegistry": "[if(parameters('useExistingAcr'), parameters('existingAcrName'), parameters('containerRegistryName'))]",
         "containerApp": "[parameters('containerAppName')]",
         "managedIdentityPrincipalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]"
       }
