@@ -332,9 +332,12 @@ This assigns the necessary roles for Microsoft Foundry to call your MCP server.
 
 1. Navigate to your Microsoft Foundry project
 2. Go to **Build** → **Create agent**  
-3. Select the **+ Add** in the tools section
+3. Select the **+ Add** in the tools section, then choose **Browse tools**
+
+  ![Browse Tools](images/ai_foundry_add.png)
+
 4. Select the **Catalog** tab 
-5. Choose **Azure Cosmos DB** as the tool and click **Create**
+5. In the **Catalog** tab, select **Azure Cosmos DB**, or search for **Azure Cosmos DB**, then click **Create**
 
    ![Add Tool from Catalog](images/ai_foundry_ui_mcp_connect.png)
 
