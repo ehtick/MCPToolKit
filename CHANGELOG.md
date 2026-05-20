@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-20
+
 ### Added
 - **Multi-provider embedding support**: Vector search now supports Azure AI Services (Cognitive Services), Azure AI Foundry projects, and OpenAI native API.
 - **Automatic endpoint detection**: System automatically identifies the embedding endpoint type based on URL pattern.

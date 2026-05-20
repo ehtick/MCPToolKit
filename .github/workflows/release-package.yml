@@ -2,16 +2,8 @@ name: Release Package
 
 on:
   push:
-    branches:
-      - "**"
     tags:
       - "v*"
-    paths:
-      - ".github/workflows/release-package.yml"
-      - "CHANGELOG.md"
-      - "Directory.Build.props"
-      - "src/**"
-      - "tests/**"
   pull_request:
     paths:
       - ".github/workflows/release-package.yml"

@@ -40,38 +40,6 @@ This toolkit provides:
 | `text_search` | Search for documents where a property contains a search phrase |
 | `vector_search` | Perform vector search using Azure OpenAI embeddings |
 
-## Release Channels And Changelog
-
-Use semantic versioning with two release channels:
-
-- `Preview`: `x.y.z-preview.n` (for early adopters)
-- `GA`: `x.y.z` (production-ready)
-
-Examples:
-
-- `v1.1.0-preview.1`
-- `v1.1.0`
-
-### Customer Tracking Rules
-
-1. Every user-visible change must be added to `CHANGELOG.md` under `Unreleased`.
-2. When publishing, move `Unreleased` content into a new section `## [x.y.z(-preview.n)] - YYYY-MM-DD`.
-3. Keep one clear entry per release so customers can map behavior to versions.
-
-### Package Versioning Commands
-
-Create a preview package:
-
-```bash
-dotnet pack src/AzureCosmosDB.MCP.Toolkit/AzureCosmosDB.MCP.Toolkit.csproj -c Release -p:PackageVersion=1.1.0-preview.1 -o ./artifacts/packages
-```
-
-Create a GA package:
-
-```bash
-dotnet pack src/AzureCosmosDB.MCP.Toolkit/AzureCosmosDB.MCP.Toolkit.csproj -c Release -p:PackageVersion=1.1.0 -o ./artifacts/packages
-```
-
 ## Project Structure
 
 ```
@@ -531,10 +499,22 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
-1. Fork the repository
-2. Create your feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+## Release Channels And Changelog
+
+Use semantic versioning with two release channels:
+
+- `Preview`: `x.y.z-preview.n` (for early adopters)
+- `GA`: `x.y.z` (production-ready)
+
+Examples:
+
+- `v1.1.0-preview.1`
+- `v1.1.0`
+
+### Customer Tracking Rules
+
+1. Every user-visible change must be added to `CHANGELOG.md` under `Unreleased`.
+2. When publishing, move `Unreleased` content into a new section `## [x.y.z(-preview.n)] - YYYY-MM-DD`.
+3. Keep one clear entry per release so customers can map behavior to versions.
