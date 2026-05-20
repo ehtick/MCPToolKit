@@ -22,6 +22,7 @@ LICENSE
 **/obj/
 **/out/
 **/publish/
+!src/AzureCosmosDB.MCP.Toolkit/bin/publish
 
 # Test results
 TestResults/
