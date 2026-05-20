@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced `OPENAI_ENDPOINT` configuration to accept multiple endpoint formats (Azure AI Services, Azure AI Foundry, OpenAI native).
 - Updated documentation and environment examples to reflect multi-provider support.
 
+### Fixed
+- Fixed token retrieval issues with Azure CLI usage (issue #83).
+- Corrected README Client ID field reference in `deployment-info.json` guidance (issue #82).
+- Fixed parsing failure in `Assign-Role-To-Users.ps1` query escaping (issue #81).
+- Fixed 404 error when downloading `cosmos-mcp-client.html` during web testing (issue #77).
+- Added missing JWT token acquisition steps in VS Code MCP setup docs (issue #76).
+- Fixed Foundry connection script parameter handling when using project name (issue #75).
+- Fixed failures in `scripts/Verify-Role-Assignments.ps1` (issue #74).
+- Fixed failures in `scripts/Assign-Role-To-Users.ps1` (issue #73).
+- Fixed failures in `scripts/Assign-Role-To-Current-User.ps1` (issue #72).
+- Included additional bug fix tracked under issue #60.
+
 ## [1.1.0-rc.1] - 2026-05-18
 
 ### Added
