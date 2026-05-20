@@ -891,7 +891,24 @@
             await makeRequest(payload, "List Tools");
         }
 
+        function expandCosmosToolsSection() {
+            const cosmosToolsHeader = document.querySelector('.section .collapsible');
+            if (!cosmosToolsHeader) {
+                return;
+            }
+
+            const cosmosToolsContent = cosmosToolsHeader.nextElementSibling;
+            if (!cosmosToolsContent) {
+                return;
+            }
+
+            cosmosToolsHeader.classList.remove('collapsed');
+            cosmosToolsContent.classList.remove('collapsed');
+        }
+
         async function testTool() {
+            expandCosmosToolsSection();
+
             const payload = {
                 jsonrpc: "2.0",
                 id: "test-" + Date.now(),
