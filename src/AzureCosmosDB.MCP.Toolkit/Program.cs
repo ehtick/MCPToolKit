@@ -554,7 +554,7 @@ public static class CosmosDbTools
         [Description("Container id to query")] string containerId,
         [Description("Document property to search, e.g. name or profile.name")] string property,
         [Description("Search term to look for within the property")] string searchPhrase,
-        [Description("Number of documents to return (1-20)")] int n)
+        [Description("Number of documents to return (1-20, default 10)")] int n = 10)
     {
         try
         {
@@ -794,7 +794,7 @@ public static class CosmosDbTools
         [Description("Text to search for semantically similar content")] string searchText,
         [Description("Property name where vector embeddings are stored, e.g. 'vector' or 'embeddings'")] string vectorProperty,
         [Description("Comma-separated list of specific properties to project in results, e.g. 'id,title,content'. Cannot use '*' wildcard.")] string selectProperties,
-        [Description("Number of documents to return (1-50)")] int topN)
+        [Description("Number of documents to return (1-50, default 10)")] int topN = 10)
     {
         try
         {
@@ -908,6 +908,162 @@ public static class CosmosDbTools
             var queryDefinition = new QueryDefinition(queryText)
                 .WithParameter("@topN", topN)
                 .WithParameter("@embedding", embedding);
+
+            var iterator = container.GetItemQueryIterator<dynamic>(
+                queryDefinition,
+                requestOptions: new QueryRequestOptions { MaxItemCount = topN }
+            );
+
+            var results = new List<string>();
+            while (iterator.HasMoreResults && results.Count < topN)
+            {
+                var page = await iterator.ReadNextAsync();
+                foreach (var doc in page)
+                {
+                    results.Add(doc?.ToString() ?? "{}");
+                    if (results.Count >= topN) break;
+                }
+            }
+
+            var jsonArray = "[" + string.Join(",", results) + "]";
+            return jsonArray;
+        }
+        catch (CosmosException cex)
+        {
+            return JsonSerializer.Serialize(new { error = cex.Message, statusCode = (int)cex.StatusCode });
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { error = ex.Message });
+        }
+    }
+
+    [McpServerTool, Description("Performs hybrid search combining vector similarity and full-text keyword search using Reciprocal Rank Fusion (RRF). Requires both a vector index and a full-text index on the container.")]
+    public static async Task<string> HybridSearch(
+        [Description("Database id containing the container")] string databaseId,
+        [Description("Container id to query")] string containerId,
+        [Description("Text to search for using both semantic similarity and keyword matching")] string searchText,
+        [Description("Property name that has a full-text index for keyword search, e.g. 'text' or 'content'")] string textProperty,
+        [Description("Property name where vector embeddings are stored, e.g. 'vector' or 'embeddings'")] string vectorProperty,
+        [Description("Comma-separated list of specific properties to project in results, e.g. 'id,title,content'. Cannot use '*' wildcard.")] string selectProperties,
+        [Description("Number of documents to return (1-50, default 10)")] int topN = 10)
+    {
+        try
+        {
+            // Validate environment variables
+            var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
+            var openaiEndpoint = Environment.GetEnvironmentVariable("OPENAI_ENDPOINT");
+            var embeddingDeployment = Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
+
+            if (string.IsNullOrWhiteSpace(cosmosEndpoint))
+            {
+                return JsonSerializer.Serialize(new { error = "Missing required environment variable COSMOS_ENDPOINT." });
+            }
+            if (string.IsNullOrWhiteSpace(openaiEndpoint))
+            {
+                return JsonSerializer.Serialize(new { error = "Missing required environment variable OPENAI_ENDPOINT." });
+            }
+            if (string.IsNullOrWhiteSpace(embeddingDeployment))
+            {
+                return JsonSerializer.Serialize(new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." });
+            }
+
+            // Validate parameters
+            if (string.IsNullOrWhiteSpace(databaseId) || string.IsNullOrWhiteSpace(containerId))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameters 'databaseId' and 'containerId' are required." });
+            }
+            if (string.IsNullOrWhiteSpace(searchText))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'searchText' is required." });
+            }
+            if (string.IsNullOrWhiteSpace(textProperty))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'textProperty' is required." });
+            }
+            if (string.IsNullOrWhiteSpace(vectorProperty))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'vectorProperty' is required." });
+            }
+            if (string.IsNullOrWhiteSpace(selectProperties))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'selectProperties' is required." });
+            }
+            if (topN < 1 || topN > 50)
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'topN' must be a whole number between 1 and 50." });
+            }
+
+            // Validate that selectProperties doesn't contain wildcard
+            if (selectProperties.Trim() == "*" || selectProperties.Contains("*"))
+            {
+                return JsonSerializer.Serialize(new { error = "Parameter 'selectProperties' cannot contain '*' wildcard. Please specify explicit property names separated by commas." });
+            }
+
+            // Validate property names
+            var propPattern = new Regex(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$");
+            
+            if (!propPattern.IsMatch(vectorProperty))
+            {
+                return JsonSerializer.Serialize(new { error = "Invalid vectorProperty name. Use dot notation with letters, digits, and underscores only (e.g., 'vector' or 'embeddings')." });
+            }
+
+            if (!propPattern.IsMatch(textProperty))
+            {
+                return JsonSerializer.Serialize(new { error = "Invalid textProperty name. Use dot notation with letters, digits, and underscores only (e.g., 'text' or 'content')." });
+            }
+
+            var properties = selectProperties.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Trim())
+                .ToArray();
+            
+            foreach (var prop in properties)
+            {
+                if (!propPattern.IsMatch(prop))
+                {
+                    return JsonSerializer.Serialize(new { error = $"Invalid property name '{prop}' in selectProperties. Use dot notation with letters, digits, and underscores only (e.g., 'id', 'title', 'metadata.author')." });
+                }
+            }
+
+            var credential = new DefaultAzureCredential();
+
+            // Generate embedding using the configured embedding service
+            float[] embedding;
+            try
+            {
+                if (AppState.Configuration == null)
+                {
+                    return JsonSerializer.Serialize(new { error = "Application configuration not initialized." });
+                }
+                
+                var embeddingClient = EmbeddingClientFactory.CreateEmbeddingClient(AppState.Configuration);
+                embedding = await embeddingClient.GenerateEmbeddingAsync(searchText, embeddingDeployment);
+            }
+            catch (Exception ex)
+            {
+                return JsonSerializer.Serialize(new { error = $"Failed to generate embedding: {ex.Message}" });
+            }
+
+            // Perform hybrid search in Cosmos DB
+            using var cosmosClient = new CosmosClient(cosmosEndpoint, credential, new CosmosClientOptions
+            {
+                ApplicationName = "AzureCosmosDBMCP"
+            });
+
+            var container = cosmosClient.GetContainer(databaseId, containerId);
+
+            var selectClause = string.Join(", ", properties.Select(p => $"c.{p}"));
+
+            // Hybrid search query using RRF to combine vector and full-text scores
+            var queryText = $@"
+                SELECT TOP @topN {selectClause}
+                FROM c
+                ORDER BY RANK RRF(VectorDistance(c.{vectorProperty}, @embedding), FullTextScore(c.{textProperty}, @searchText))";
+
+            var queryDefinition = new QueryDefinition(queryText)
+                .WithParameter("@topN", topN)
+                .WithParameter("@embedding", embedding)
+                .WithParameter("@searchText", searchText);
 
             var iterator = container.GetItemQueryIterator<dynamic>(
                 queryDefinition,

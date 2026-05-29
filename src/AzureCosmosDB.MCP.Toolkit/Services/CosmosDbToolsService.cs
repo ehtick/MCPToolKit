@@ -214,7 +214,7 @@ public class CosmosDbToolsService
         }
     }
 
-    public async Task<object> TextSearch(string databaseId, string containerId, string property, string searchPhrase, int n, CancellationToken cancellationToken = default)
+    public async Task<object> TextSearch(string databaseId, string containerId, string property, string searchPhrase, int n = 10, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -279,7 +279,7 @@ public class CosmosDbToolsService
         }
     }
 
-    public async Task<object> VectorSearch(string databaseId, string containerId, string searchText, string vectorProperty, string selectProperties, int topN, CancellationToken cancellationToken = default)
+    public async Task<object> VectorSearch(string databaseId, string containerId, string searchText, string vectorProperty, string selectProperties, int topN = 10, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -432,6 +432,170 @@ public class CosmosDbToolsService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in vector search");
+            return new { error = ex.Message };
+        }
+    }
+
+    public async Task<object> HybridSearch(string databaseId, string containerId, string searchText, string textProperty, string vectorProperty, string selectProperties, int topN = 10, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Validate parameters
+            ValidateRequiredParameter(databaseId, nameof(databaseId));
+            ValidateRequiredParameter(containerId, nameof(containerId));
+            ValidateRequiredParameter(searchText, nameof(searchText));
+            ValidateRequiredParameter(textProperty, nameof(textProperty));
+            ValidateRequiredParameter(vectorProperty, nameof(vectorProperty));
+            ValidateRequiredParameter(selectProperties, nameof(selectProperties));
+            
+            if (topN < 1 || topN > 50)
+            {
+                return new { error = "Parameter 'topN' must be a whole number between 1 and 50." };
+            }
+
+            if (selectProperties.Trim() == "*" || selectProperties.Contains("*"))
+            {
+                return new { error = "Parameter 'selectProperties' cannot contain '*' wildcard. Please specify explicit property names separated by commas." };
+            }
+
+            var propPattern = new Regex(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$");
+            
+            if (!propPattern.IsMatch(vectorProperty))
+            {
+                return new { error = "Invalid vectorProperty name. Use dot notation with letters, digits, and underscores only (e.g., 'vector' or 'embeddings')." };
+            }
+
+            if (!propPattern.IsMatch(textProperty))
+            {
+                return new { error = "Invalid textProperty name. Use dot notation with letters, digits, and underscores only (e.g., 'text' or 'content')." };
+            }
+
+            var properties = selectProperties.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Trim())
+                .ToArray();
+            
+            foreach (var prop in properties)
+            {
+                if (!propPattern.IsMatch(prop))
+                {
+                    return new { error = $"Invalid property name '{prop}' in selectProperties. Use dot notation with letters, digits, and underscores only (e.g., 'id', 'title', 'metadata.author')." };
+                }
+            }
+
+            _logger.LogInformation("Hybrid search for '{SearchText}' in {DatabaseId}/{ContainerId}", searchText, databaseId, containerId);
+
+            // Generate embedding using the appropriate embedding service
+            // (Azure AI Services, OpenAI native, or Azure AI Foundry)
+            float[] embedding;
+            try
+            {
+                _logger.LogInformation("Creating embedding client for hybrid search embedding generation");
+
+                var configuredApiKey = _configuration["OPENAI_API_KEY"]
+                    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+                var authMode = string.IsNullOrWhiteSpace(configuredApiKey) ? "azure-credential" : "api-key";
+                _logger.LogInformation("Embedding authentication mode: {AuthMode}", authMode);
+                
+                var embeddingClient = EmbeddingClientFactory.CreateEmbeddingClient(_configuration, _logger);
+                
+                var embeddingDeployment = _configuration["OPENAI_EMBEDDING_DEPLOYMENT"] 
+                    ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DEPLOYMENT");
+                
+                if (string.IsNullOrWhiteSpace(embeddingDeployment))
+                {
+                    return new { error = "Missing required environment variable OPENAI_EMBEDDING_DEPLOYMENT." };
+                }
+                
+                var embeddingDimensionsStr = _configuration["OPENAI_EMBEDDING_DIMENSIONS"] 
+                    ?? Environment.GetEnvironmentVariable("OPENAI_EMBEDDING_DIMENSIONS");
+
+                int? embeddingDimensions = null;
+                if (!string.IsNullOrWhiteSpace(embeddingDimensionsStr) && int.TryParse(embeddingDimensionsStr, out int parsedDimensions) && parsedDimensions > 0)
+                {
+                    embeddingDimensions = parsedDimensions;
+                }
+                
+                _logger.LogInformation("Generating embedding for deployment: {Deployment}{DimensionsInfo}", 
+                    embeddingDeployment,
+                    embeddingDimensions.HasValue ? $" with {embeddingDimensions.Value} dimensions" : "");
+                
+                embedding = await embeddingClient.GenerateEmbeddingAsync(searchText, embeddingDeployment, cancellationToken);
+                _logger.LogInformation("Generated embedding with {Dimensions} dimensions", embedding.Length);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 401 || ex.Status == 403)
+            {
+                var configuredApiKey = _configuration["OPENAI_API_KEY"]
+                    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+                var usingApiKey = !string.IsNullOrWhiteSpace(configuredApiKey);
+
+                var hint = usingApiKey
+                    ? "OPENAI_API_KEY is configured. Verify the key matches OPENAI_ENDPOINT and has permission to use OPENAI_EMBEDDING_DEPLOYMENT."
+                    : "OPENAI_API_KEY is not configured. The service is using DefaultAzureCredential. Ensure the runtime identity has OpenAI data-plane access (for example, Cognitive Services OpenAI User) on the target resource.";
+
+                _logger.LogError(ex, "Embedding authorization failed with status {StatusCode}. Hint: {Hint}", ex.Status, hint);
+                return new
+                {
+                    error = $"Failed to generate embedding: {ex.Message}",
+                    statusCode = ex.Status,
+                    hint
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate embedding for hybrid search");
+                return new { error = $"Failed to generate embedding: {ex.Message}" };
+            }
+
+            var container = _cosmosClient.GetContainer(databaseId, containerId);
+
+            var selectClause = string.Join(", ", properties.Select(p => $"c.{p}"));
+
+            var queryText = $@"
+                SELECT TOP @topN {selectClause}
+                FROM c
+                ORDER BY RANK RRF(VectorDistance(c.{vectorProperty}, @embedding), FullTextScore(c.{textProperty}, @searchText))";
+
+            var queryDefinition = new QueryDefinition(queryText)
+                .WithParameter("@topN", topN)
+                .WithParameter("@embedding", embedding)
+                .WithParameter("@searchText", searchText);
+
+            using var streamIterator = container.GetItemQueryStreamIterator(
+                queryDefinition,
+                requestOptions: new QueryRequestOptions { MaxItemCount = topN }
+            );
+
+            var results = new List<System.Text.Json.JsonElement>();
+            while (streamIterator.HasMoreResults && results.Count < topN)
+            {
+                using var response = await streamIterator.ReadNextAsync(cancellationToken);
+                using var stream = response.Content;
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                
+                var documents = document.RootElement.GetProperty("Documents");
+                foreach (var doc in documents.EnumerateArray())
+                {
+                    results.Add(doc.Clone());
+                    if (results.Count >= topN) break;
+                }
+            }
+
+            _logger.LogInformation("Hybrid search returned {Count} results", results.Count);
+            return results;
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid parameter: {Message}", ex.Message);
+            return new { error = ex.Message };
+        }
+        catch (CosmosException cex)
+        {
+            _logger.LogError(cex, "Cosmos DB error in hybrid search: {StatusCode}", cex.StatusCode);
+            return new { error = cex.Message, statusCode = (int)cex.StatusCode };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in hybrid search");
             return new { error = ex.Message };
         }
     }

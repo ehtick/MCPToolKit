@@ -192,9 +192,9 @@ public class MCPProtocolController : ControllerBase
                                             containerId = new { type = "string", description = "Container id to query", maxLength = 256 },
                                             property = new { type = "string", description = "Document property to search", maxLength = 256 },
                                             searchPhrase = new { type = "string", description = "Search term to look for", maxLength = 2048 },
-                                            n = new { type = "integer", description = "Number of documents to return (1-20)", minimum = 1, maximum = 20 }
+                                            n = new { type = "integer", description = "Number of documents to return (1-20, default 10)", minimum = 1, maximum = 20, @default = 10 }
                                         },
-                                        required = new string[] { "databaseId", "containerId", "property", "searchPhrase", "n" },
+                                        required = new string[] { "databaseId", "containerId", "property", "searchPhrase" },
                                         additionalProperties = false
                                     }
                                 },
@@ -236,9 +236,27 @@ public class MCPProtocolController : ControllerBase
                                             searchText = new { type = "string", description = "Text to search for semantically similar content", maxLength = 2048 },
                                             vectorProperty = new { type = "string", description = "Property name where vector embeddings are stored", maxLength = 256 },
                                             selectProperties = new { type = "string", description = "Comma-separated list of specific properties to project in results", maxLength = 512 },
-                                            topN = new { type = "integer", description = "Number of documents to return (1-50)", minimum = 1, maximum = 50 }
+                                            topN = new { type = "integer", description = "Number of documents to return (1-50, default 10)", minimum = 1, maximum = 50, @default = 10 }
                                         },
-                                        required = new string[] { "databaseId", "containerId", "searchText", "vectorProperty", "selectProperties", "topN" },
+                                        required = new string[] { "databaseId", "containerId", "searchText", "vectorProperty", "selectProperties" },
+                                        additionalProperties = false
+                                    }
+                                },
+                                new { 
+                                    name = "hybrid_search", 
+                                    description = "Performs hybrid search combining vector similarity and full-text search using Reciprocal Rank Fusion (RRF). Requires both a vector index and a full-text index on the container.",
+                                    inputSchema = new {
+                                        type = "object",
+                                        properties = new {
+                                            databaseId = new { type = "string", description = "Database id containing the container", maxLength = 256 },
+                                            containerId = new { type = "string", description = "Container id to query", maxLength = 256 },
+                                            searchText = new { type = "string", description = "Text to search for using both semantic similarity and keyword matching", maxLength = 2048 },
+                                            textProperty = new { type = "string", description = "Property name that has a full-text index for keyword search", maxLength = 256 },
+                                            vectorProperty = new { type = "string", description = "Property name where vector embeddings are stored", maxLength = 256 },
+                                            selectProperties = new { type = "string", description = "Comma-separated list of specific properties to project in results", maxLength = 512 },
+                                            topN = new { type = "integer", description = "Number of documents to return (1-50, default 10)", minimum = 1, maximum = 50, @default = 10 }
+                                        },
+                                        required = new string[] { "databaseId", "containerId", "searchText", "textProperty", "vectorProperty", "selectProperties" },
                                         additionalProperties = false
                                     }
                                 }
@@ -406,7 +424,7 @@ public class MCPProtocolController : ControllerBase
                 GetStringArg(args, "containerId"),
                 GetStringArg(args, "property"),
                 GetStringArg(args, "searchPhrase"),
-                GetRequiredIntArg(args, "n"),
+                GetOptionalIntArg(args, "n", 10),
                 cancellationToken),
             "find_document_by_id" => await _cosmosDbTools.FindDocumentByID(
                 GetStringArg(args, "databaseId"),
@@ -423,7 +441,16 @@ public class MCPProtocolController : ControllerBase
                 GetStringArg(args, "searchText"),
                 GetStringArg(args, "vectorProperty"),
                 GetStringArg(args, "selectProperties"),
-                GetRequiredIntArg(args, "topN"),
+                GetOptionalIntArg(args, "topN", 10),
+                cancellationToken),
+            "hybrid_search" => await _cosmosDbTools.HybridSearch(
+                GetStringArg(args, "databaseId"),
+                GetStringArg(args, "containerId"),
+                GetStringArg(args, "searchText"),
+                GetStringArg(args, "textProperty"),
+                GetStringArg(args, "vectorProperty"),
+                GetStringArg(args, "selectProperties"),
+                GetOptionalIntArg(args, "topN", 10),
                 cancellationToken),
             _ => throw new ArgumentException($"Unknown tool: {toolName}")
         };
@@ -447,6 +474,21 @@ public class MCPProtocolController : ControllerBase
             return parsedValue;
 
         throw new ArgumentException($"Parameter '{key}' must be a valid integer");
+    }
+
+    private static int GetOptionalIntArg(Dictionary<string, object> args, string key, int defaultValue)
+    {
+        if (!args.TryGetValue(key, out var value))
+        {
+            return defaultValue;
+        }
+
+        if (value is int intValue)
+            return intValue;
+        if (int.TryParse(value?.ToString(), out var parsedValue))
+            return parsedValue;
+
+        return defaultValue;
     }
     
     [HttpGet("debug")]

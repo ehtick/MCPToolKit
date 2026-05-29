@@ -5,7 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.2] - 2026-05-29
+
+### Added
+- **Hybrid search tool** (`hybrid_search`): Combines vector similarity and full-text keyword search using Cosmos DB's Reciprocal Rank Fusion (RRF) ranking. Requires both a vector index and a full-text index on the target container (issue #89).
+- Added `hybrid_search` to the web testing UI dropdown.
+
+### Changed
+- Default `topN`/`n` for `text_search`, `vector_search`, and `hybrid_search` is now 10 (parameter is optional; existing callers unaffected).
+- Updated NuGet dependencies:
+  - ModelContextProtocol.AspNetCore 0.3.0-preview.4 → 1.3.0
+  - Microsoft.Azure.Cosmos 3.53.0 → 3.60.0
+  - Azure.Identity 1.12.0 → 1.21.0
+  - Azure.AI.OpenAI 2.0.0 → 2.1.0
+  - OpenAI 2.0.0 → 2.1.0
+  - Microsoft.AspNetCore.Authentication.JwtBearer 9.0.0 → 9.0.16
+  - Microsoft.IdentityModel.JsonWebTokens 8.1.2 → 8.18.0
+  - Microsoft.IdentityModel.Protocols.OpenIdConnect 8.1.2 → 8.18.0
+  - Microsoft.IdentityModel.Tokens 8.1.2 → 8.18.0
+  - System.IdentityModel.Tokens.Jwt 8.1.2 → 8.18.0
+  - Microsoft.NET.Test.Sdk 17.8.0 → 18.5.1
+  - Microsoft.AspNetCore.Mvc.Testing 9.0.0 → 9.0.16
+  - FluentAssertions 6.12.0 → 8.10.0
 
 ## [1.1.1] - 2026-05-20
 
