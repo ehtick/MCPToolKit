@@ -336,6 +336,7 @@
                         <option value="find_document_by_id">Find Document by ID</option>
                         <option value="text_search">Text Search</option>
                         <option value="vector_search">Vector Search</option>
+                        <option value="hybrid_search">Hybrid Search</option>
                         <option value="get_approximate_schema">Get Schema</option>
                     </select>
                 </div>
@@ -364,6 +365,11 @@
                     <div class="form-group" id="vectorPropertyField" style="display: none;">
                         <label for="vectorProperty">Vector Property:</label>
                         <input type="text" id="vectorProperty" placeholder="vector or embeddings">
+                    </div>
+                    
+                    <div class="form-group" id="textPropertyField" style="display: none;">
+                        <label for="textProperty">Text Property (full-text index):</label>
+                        <input type="text" id="textProperty" placeholder="content or text">
                     </div>
                     
                     <div class="form-group" id="selectPropertiesField" style="display: none;">
@@ -736,7 +742,13 @@
                     toolParams.searchText = document.getElementById('vectorSearch')?.value || 'machine learning';
                     toolParams.vectorProperty = document.getElementById('vectorProperty')?.value || 'vector';
                     toolParams.selectProperties = document.getElementById('selectProperties')?.value || 'id,title';
-                    toolParams.topN = 5;
+                    toolParams.topN = 10;
+                } else if (tool === 'hybrid_search') {
+                    toolParams.searchText = document.getElementById('vectorSearch')?.value || 'machine learning';
+                    toolParams.textProperty = document.getElementById('textProperty')?.value || 'content';
+                    toolParams.vectorProperty = document.getElementById('vectorProperty')?.value || 'vector';
+                    toolParams.selectProperties = document.getElementById('selectProperties')?.value || 'id,title';
+                    toolParams.topN = 10;
                 } else if (tool === 'list_databases') {
                     toolParams = {}; // No parameters needed
                 } else if (tool === 'list_collections') {
@@ -999,7 +1011,26 @@
                         searchText: searchText,
                         vectorProperty: vectorProp,
                         selectProperties: selectProps,
-                        topN: parseInt(document.getElementById('resultCount').value) || 5
+                        topN: parseInt(document.getElementById('resultCount').value) || 10
+                    };
+                    break;
+                case 'hybrid_search':
+                    const hybridSearchText = document.getElementById('vectorSearch').value.trim();
+                    const hybridTextProp = document.getElementById('textProperty').value.trim();
+                    const hybridVectorProp = document.getElementById('vectorProperty').value.trim();
+                    const hybridSelectProps = document.getElementById('selectProperties').value.trim();
+                    if (!database || !container || !hybridSearchText || !hybridTextProp || !hybridVectorProp || !hybridSelectProps) {
+                        showError('Database ID, Container ID, Search Text, Text Property, Vector Property, and Select Properties are required');
+                        return;
+                    }
+                    toolParams = { 
+                        databaseId: database, 
+                        containerId: container,
+                        searchText: hybridSearchText,
+                        textProperty: hybridTextProp,
+                        vectorProperty: hybridVectorProp,
+                        selectProperties: hybridSelectProps,
+                        topN: parseInt(document.getElementById('resultCount').value) || 10
                     };
                     break;
                 case 'get_approximate_schema':
@@ -1062,6 +1093,7 @@
             document.getElementById('searchPhraseField').style.display = 'none';
             document.getElementById('vectorSearchField').style.display = 'none';
             document.getElementById('vectorPropertyField').style.display = 'none';
+            document.getElementById('textPropertyField').style.display = 'none';
             document.getElementById('selectPropertiesField').style.display = 'none';
             document.getElementById('resultCountField').style.display = 'none';
             
@@ -1104,6 +1136,13 @@
                     document.getElementById('vectorPropertyField').style.display = 'block';
                     document.getElementById('selectPropertiesField').style.display = 'block';
                     // vector_search does NOT show resultCountField - uses fixed value or topN
+                    break;
+                    
+                case 'hybrid_search':
+                    document.getElementById('vectorSearchField').style.display = 'block';
+                    document.getElementById('textPropertyField').style.display = 'block';
+                    document.getElementById('vectorPropertyField').style.display = 'block';
+                    document.getElementById('selectPropertiesField').style.display = 'block';
                     break;
                     
                 case 'get_approximate_schema':

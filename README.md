@@ -1,12 +1,12 @@
 # Azure Cosmos DB MCP Toolkit
 
-A Model Context Protocol (MCP) server that enables AI agents to interact with Azure Cosmos DB through natural language queries. Features enterprise-grade security with Azure Entra ID authentication, document operations, vector search, and schema discovery.
+A Model Context Protocol (MCP) server that enables AI agents to interact with Azure Cosmos DB through natural language queries. Features enterprise-grade security with Azure Entra ID authentication, document operations, vector search, hybrid search, and schema discovery.
 
 ## Prerequisites
 
 - Azure subscription ([Free account](https://azure.microsoft.com/free/))
 - **Azure Cosmos DB account** ([Create account](https://learn.microsoft.com/azure/cosmos-db/nosql/quickstart-portal))
-- **Embedding Service** (one of the following for vector search):
+- **Embedding Service** (one of the following for vector search and hybrid search):
   - **Azure AI Services (Cognitive Services)** with embedding model ([Create](https://learn.microsoft.com/azure/ai-services/what-are-ai-services))
   - **Azure AI Foundry** with embedding model ([Create](https://learn.microsoft.com/azure/ai/foundry/how-to/create-projects))
   - **OpenAI API** with API key ([Get API key](https://platform.openai.com/api-keys))
@@ -22,8 +22,8 @@ A Model Context Protocol (MCP) server that enables AI agents to interact with Az
 This toolkit provides:
 
 - **Secure MCP Server**: JWT-authenticated endpoint for AI agents
-- **Azure Cosmos DB Integration**: Full CRUD operations, vector search, and schema discovery
-- **Azure AI Services Integration**: Automatic embeddings and vector search support
+- **Azure Cosmos DB Integration**: Full CRUD operations, vector search, hybrid search, and schema discovery
+- **Azure AI Services Integration**: Automatic embeddings for vector and hybrid search support
 - **Enterprise Security**: Azure Entra ID, Managed Identity, RBAC
 - **Production Ready**: Container Apps hosting with auto-scaling
 - **Local Development**: Docker Compose and .NET dev options
@@ -39,6 +39,7 @@ This toolkit provides:
 | `find_document_by_id` | Find a document by its id |
 | `text_search` | Search for documents where a property contains a search phrase |
 | `vector_search` | Perform vector search using Azure OpenAI embeddings |
+| `hybrid_search` | Perform hybrid search combining vector similarity and full-text keyword search using Reciprocal Rank Fusion (RRF) |
 
 ## Project Structure
 

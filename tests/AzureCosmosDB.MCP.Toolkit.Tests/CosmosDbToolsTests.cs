@@ -84,6 +84,152 @@ public class CosmosDbToolsTests
         errorMessage.Should().Contain("required");
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(51)]
+    [InlineData(-1)]
+    public async Task HybridSearch_Should_Validate_TopN_Parameter(int topN)
+    {
+        // Arrange
+        var mockCosmosClient = new Mock<CosmosClient>();
+        var service = new CosmosDbToolsService(mockCosmosClient.Object, _loggerMock.Object, _configurationMock.Object);
+        
+        // Act
+        var result = await service.HybridSearch("testDb", "testContainer", "search text", "text", "vector", "id,title", topN);
+        
+        // Assert
+        result.Should().NotBeNull();
+        var errorMessage = JsonSerializer.Serialize(result);
+        errorMessage.Should().Contain("must be a whole number between 1 and 50");
+    }
+
+    [Fact]
+    public async Task HybridSearch_Should_Reject_Wildcard_SelectProperties()
+    {
+        // Arrange
+        var mockCosmosClient = new Mock<CosmosClient>();
+        var service = new CosmosDbToolsService(mockCosmosClient.Object, _loggerMock.Object, _configurationMock.Object);
+        
+        // Act
+        var result = await service.HybridSearch("testDb", "testContainer", "search text", "text", "vector", "*", 10);
+        
+        // Assert
+        result.Should().NotBeNull();
+        var errorMessage = JsonSerializer.Serialize(result);
+        errorMessage.Should().Contain("cannot contain '*' wildcard");
+    }
+
+    [Fact]
+    public async Task HybridSearch_Should_Validate_VectorProperty_Name()
+    {
+        // Arrange
+        var mockCosmosClient = new Mock<CosmosClient>();
+        var service = new CosmosDbToolsService(mockCosmosClient.Object, _loggerMock.Object, _configurationMock.Object);
+        
+        // Act
+        var result = await service.HybridSearch("testDb", "testContainer", "search text", "text", "invalid-vector!", "id,title", 10);
+        
+        // Assert
+        result.Should().NotBeNull();
+        var errorMessage = JsonSerializer.Serialize(result);
+        errorMessage.Should().Contain("Invalid vectorProperty name");
+    }
+
+    [Fact]
+    public async Task HybridSearch_Should_Validate_TextProperty_Name()
+    {
+        // Arrange
+        var mockCosmosClient = new Mock<CosmosClient>();
+        var service = new CosmosDbToolsService(mockCosmosClient.Object, _loggerMock.Object, _configurationMock.Object);
+        
+        // Act
+        var result = await service.HybridSearch("testDb", "testContainer", "search text", "invalid-text!", "vector", "id,title", 10);
+        
+        // Assert
+        result.Should().NotBeNull();
+        var errorMessage = JsonSerializer.Serialize(result);
+        errorMessage.Should().Contain("Invalid textProperty name");
+    }
+
+    [Fact]
+    public async Task HybridSearch_Should_Require_Parameters()
+    {
+        // Arrange
+        var mockCosmosClient = new Mock<CosmosClient>();
+        var service = new CosmosDbToolsService(mockCosmosClient.Object, _loggerMock.Object, _configurationMock.Object);
+        
+        // Act
+        var result = await service.HybridSearch("", "", "", "", "", "", 10);
+        
+        // Assert
+        result.Should().NotBeNull();
+        var errorMessage = JsonSerializer.Serialize(result);
+        errorMessage.Should().Contain("required");
+    }
+
+    [Fact]
+    public void McpToolRequestValidator_Should_Accept_Valid_HybridSearch()
+    {
+        // Arrange
+        var validator = new McpToolRequestValidator();
+        using var document = JsonDocument.Parse(
+            """
+            {
+                "name": "hybrid_search",
+                "arguments": {
+                    "databaseId": "db1",
+                    "containerId": "container1",
+                    "searchText": "machine learning",
+                    "textProperty": "content",
+                    "vectorProperty": "embedding",
+                    "selectProperties": "id,title,content",
+                    "topN": 10
+                }
+            }
+            """);
+
+        // Act
+        var result = validator.ValidateToolCall(document.RootElement);
+
+        // Assert
+        result.ToolName.Should().Be("hybrid_search");
+        result.Arguments["databaseId"].Should().Be("db1");
+        result.Arguments["containerId"].Should().Be("container1");
+        result.Arguments["searchText"].Should().Be("machine learning");
+        result.Arguments["textProperty"].Should().Be("content");
+        result.Arguments["vectorProperty"].Should().Be("embedding");
+        result.Arguments["selectProperties"].Should().Be("id,title,content");
+        result.Arguments["topN"].Should().Be(10);
+    }
+
+    [Fact]
+    public void McpToolRequestValidator_Should_Reject_HybridSearch_Missing_TextProperty()
+    {
+        // Arrange
+        var validator = new McpToolRequestValidator();
+        using var document = JsonDocument.Parse(
+            """
+            {
+                "name": "hybrid_search",
+                "arguments": {
+                    "databaseId": "db1",
+                    "containerId": "container1",
+                    "searchText": "machine learning",
+                    "vectorProperty": "embedding",
+                    "selectProperties": "id,title",
+                    "topN": 10
+                }
+            }
+            """);
+
+        // Act
+        Action act = () => validator.ValidateToolCall(document.RootElement);
+
+        // Assert
+        act.Should().Throw<ToolInputValidationException>()
+            .WithMessage("*Missing required argument 'textProperty'*");
+    }
+
         [Fact]
         public void McpToolRequestValidator_Should_Reject_Unknown_Argument_Properties()
         {

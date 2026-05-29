@@ -27,7 +27,7 @@ public sealed class McpToolRequestValidator
                 ["containerId"] = ToolArgumentSchema.String(required: true, maxLength: 256),
                 ["property"] = ToolArgumentSchema.String(required: true, maxLength: 256),
                 ["searchPhrase"] = ToolArgumentSchema.String(required: true, maxLength: 2048),
-                ["n"] = ToolArgumentSchema.Integer(required: true, minValue: 1, maxValue: 20)
+                ["n"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 20)
             }),
             ["find_document_by_id"] = new(new Dictionary<string, ToolArgumentSchema>(StringComparer.Ordinal)
             {
@@ -47,7 +47,17 @@ public sealed class McpToolRequestValidator
                 ["searchText"] = ToolArgumentSchema.String(required: true, maxLength: 2048),
                 ["vectorProperty"] = ToolArgumentSchema.String(required: true, maxLength: 256),
                 ["selectProperties"] = ToolArgumentSchema.String(required: true, maxLength: 512),
-                ["topN"] = ToolArgumentSchema.Integer(required: true, minValue: 1, maxValue: 50)
+                ["topN"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 50)
+            }),
+            ["hybrid_search"] = new(new Dictionary<string, ToolArgumentSchema>(StringComparer.Ordinal)
+            {
+                ["databaseId"] = ToolArgumentSchema.String(required: true, maxLength: 256),
+                ["containerId"] = ToolArgumentSchema.String(required: true, maxLength: 256),
+                ["searchText"] = ToolArgumentSchema.String(required: true, maxLength: 2048),
+                ["textProperty"] = ToolArgumentSchema.String(required: true, maxLength: 256),
+                ["vectorProperty"] = ToolArgumentSchema.String(required: true, maxLength: 256),
+                ["selectProperties"] = ToolArgumentSchema.String(required: true, maxLength: 512),
+                ["topN"] = ToolArgumentSchema.Integer(required: false, minValue: 1, maxValue: 50)
             })
         };
 
