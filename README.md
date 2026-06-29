@@ -1,6 +1,30 @@
 # Azure Cosmos DB MCP Toolkit
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/AzureCosmosDB/MCPToolKit?style=social)](https://github.com/AzureCosmosDB/MCPToolKit)
+[![MCP Protocol](https://img.shields.io/badge/MCP-1.3.0-blue)](https://spec.modelcontextprotocol.io/)
+[![Azure](https://img.shields.io/badge/Azure-Cosmos%20DB-0078D4?logo=microsoft-azure)](https://azure.microsoft.com/services/cosmos-db/)
+
 A Model Context Protocol (MCP) server that enables AI agents to interact with Azure Cosmos DB through natural language queries. Features enterprise-grade security with Azure Entra ID authentication, document operations, vector search, hybrid search, and schema discovery.
+
+## 🎯 Why Use This Toolkit?
+
+**The Problem:**  
+Building AI agents that can securely access enterprise data in Cosmos DB requires deep expertise in MCP protocol, authentication, embedding services, and cloud security. It's complex, time-consuming, and error-prone.
+
+**The Solution:**  
+This toolkit provides a **production-ready, fully automated MCP server** that handles everything:
+
+- ✅ **MCP Protocol** — No protocol knowledge needed; we handle all MCP compliance  
+- ✅ **Enterprise Security** — Azure Entra ID + Managed Identity + RBAC built-in  
+- ✅ **Vector & Hybrid Search** — Automatic embeddings with Azure OpenAI/Foundry  
+- ✅ **One-Click Deployment** — Deploy to Azure in minutes with a single button click  
+- ✅ **Schema Discovery** — AI agents automatically understand your data  
+- ✅ **Production-Ready** — Auto-scaling, monitoring, and enterprise-grade hosting  
+
+**Get started in 5 minutes:** ⚡ [Quick Start Guide](docs/QUICK-START.md)
+
+**See it in action:** 📚 [Real-world use cases](docs/USE-CASES.md) • 🗺️ [Roadmap](ROADMAP.md) • 🤝 [Contributing](CONTRIBUTING.md)
 
 ## Prerequisites
 
@@ -490,12 +514,51 @@ If you get authentication errors:
 - **Managed Identity**: Container App uses managed identity for Cosmos DB access
 - **RBAC**: Least-privilege role assignments
 
+---
 
+## Telemetry
+
+**The MCP Toolkit does not collect any telemetry.** Your data stays in your Azure subscription.
+
+### What We Don't Collect
+- ❌ No usage data or analytics
+- ❌ No crash reports
+- ❌ No diagnostic information
+- ❌ No network calls except to your Azure resources
+
+### What You Control
+- ✅ All your Cosmos DB data stays in your account
+- ✅ All queries and results stay within your network (if using Private Link)
+- ✅ You see exactly what data the server accesses
+
+### Azure-Side Data Collection
+When you use the MCP Toolkit, Azure Cosmos DB (like any service) records operational data:
+- Request counts and response times
+- RU/s (Request Unit) consumption
+- Error codes and throttling events
+
+This is standard for all Azure services and governed by the [Microsoft Privacy Statement](https://go.microsoft.com/fwlink/?LinkID=521839). You can control this via diagnostic settings in Azure Monitor.
+
+For details, see [SECURITY.md](SECURITY.md) and [Azure Cosmos DB Monitoring](https://learn.microsoft.com/azure/cosmos-db/monitor).
+
+---
 
 ## Additional Resources
 
+- [Use Cases & Examples](docs/USE-CASES.md) - Real-world scenarios and how to build them
+- [Roadmap](ROADMAP.md) - Planned features and community priorities
 - [Architecture Diagrams](docs/ARCHITECTURE-DIAGRAMS.md) - System architecture, component interactions, and deployment topology diagrams
 - [Web Testing Guide](docs/WEB-TESTING-GUIDE.md) - Using the browser-based test UI to interact with the MCP server
+- [Contributing Guide](CONTRIBUTING.md) - How to contribute and get involved
+- [Quick Start](docs/QUICK-START.md) - 5-minute setup guide for new users
+- [Support](SUPPORT.md) - Get help, report issues, and frequently asked questions
+- [Security Policy](SECURITY.md) - Security guidelines and responsible disclosure
+
+## Governance
+
+- [Code of Conduct](CODE_OF_CONDUCT.md) - Community standards and expectations
+- [Contributing](CONTRIBUTING.md) - How to contribute code and improvements
+- [Security](SECURITY.md) - Security reporting and best practices
 
 ## License
 
